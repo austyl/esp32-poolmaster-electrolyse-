@@ -37,7 +37,14 @@ RunTimeData PMData =
   0.0, 0.0,
   28.0, 
   7.2, 720., 1.3,
-  7.2, 720
+  7.2, 720,
+  0,
+  true,
+  true,
+  false,
+  true,
+  (uint8_t)ELECTROLYSIS_OFF,
+  false
 };
 
 // Various global flags
@@ -158,6 +165,7 @@ void PoolMaster(void*);
 void AnalogPoll(void*);
 void pHRegulation(void*);
 void OrpRegulation(void*);
+void ElectrolysisControl(void*);
 void getTemp(void*);
 void ProcessCommand(void*);
 void SettingsPublish(void*);
@@ -267,6 +275,18 @@ void setup()
   PMConfig.initParam(PHAUTOMODE,          "PhAutoMode",             (bool)false);
   PMConfig.initParam(ORPAUTOMODE,         "OrpAutoMode",            (bool)false);
   PMConfig.initParam(FILLAUTOMODE,        "FillAutoMode",           (bool)false);
+  // Electrolysis control (IBT-2) parameters
+  PMConfig.initParam(ELECTROLYSIS_ENABLED,           "ElectrolysisEnabled",       (bool)false);
+  PMConfig.initParam(ELECTROLYSIS_START_DELAY_S,     "ElectrolysisStartDelayS",   (uint32_t)120);
+  PMConfig.initParam(ELECTROLYSIS_REVERSE_INTERVAL_MIN, "ElectrolysisRevIntMin",  (uint32_t)180);
+  PMConfig.initParam(ELECTROLYSIS_DEADTIME_S,        "ElectrolysisDeadtimeS",     (uint32_t)10);
+  PMConfig.initParam(ELECTROLYSIS_WINDOW_S,          "ElectrolysisWindowS",       (uint32_t)120);
+  PMConfig.initParam(ELECTROLYSIS_MIN_TEMP_C,        "ElectrolysisMinTempC",      (double)15.0);
+  PMConfig.initParam(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN, "ElectrolysisMaxRunDayMin", (uint32_t)720);
+  PMConfig.initParam(ELECTROLYSIS_ORP_LOW_PCT,       "ElectrolysisOrpLowPct",     (uint8_t)40);
+  PMConfig.initParam(ELECTROLYSIS_ORP_HIGH_PCT,      "ElectrolysisOrpHighPct",    (uint8_t)100);
+  PMConfig.initParam(REQUIRE_FLOW_SWITCH,            "RequireFlowSwitch",         (bool)true);
+  PMConfig.initParam(REQUIRE_PRESSURE_OK,            "RequirePressureOk",         (bool)true);
   PMConfig.initParam(LANG_LOCALE,         "LangLocale",             (uint8_t)0);
   PMConfig.initParam(MQTT_IP,             "MqttIP",                 (uint32_t)IPAddress(192,168,0,0));
   PMConfig.initParam(MQTT_PORT,           "MqttPort",               (uint32_t)1883);
@@ -444,11 +464,22 @@ void setup()
     app_cpu
   );
   
- // ORP regulation loop
-    xTaskCreatePinnedToCore(
+  // ORP regulation loop
+  xTaskCreatePinnedToCore(
     OrpRegulation,
     "ORPRegulation",
     2048,
+    NULL,
+    1,
+    nullptr,
+    app_cpu
+  );
+
+  // Electrolysis control loop (IBT-2 state machine)
+  xTaskCreatePinnedToCore(
+    ElectrolysisControl,
+    "ElectrolysisControl",
+    3072,
     NULL,
     1,
     nullptr,
@@ -668,4 +699,3 @@ void loop()
   delay(1000);
   vTaskDelete(nullptr);
 }
-

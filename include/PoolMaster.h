@@ -73,7 +73,24 @@ struct RunTimeData {
     double PhValue, OrpValue, PSIValue;
     double Ph_SetPoint, Orp_SetPoint; // Should not be in RunTime Data, but needed for PID regulation. This way the PID regulation always know about
                                       // the setpoint, even if it changes in the program.
+    // Electrolysis control runtime data (V1)
+    uint8_t ElectrolysisDemandPct;
+    bool FlowSwitchOk;
+    bool PressureOk;
+    bool ElectrolysisCellOn;
+    bool ElectrolysisPolarityForward;
+    uint8_t ElectrolysisState;
+    bool ElectrolysisFault;
 };
+
+typedef enum ElectrolysisState {
+    ELECTROLYSIS_OFF = 0,
+    ELECTROLYSIS_WAIT_FLOW,
+    ELECTROLYSIS_RUN_FWD,
+    ELECTROLYSIS_DEADTIME,
+    ELECTROLYSIS_RUN_REV,
+    ELECTROLYSIS_FAULT
+} ElectrolysisState_t;
 
 enum ParamID {
     AUTOMODE, WINTERMODE,
@@ -84,6 +101,9 @@ enum ParamID {
     PH_KP, PH_KI, PH_KD, ORP_KP, ORP_KI, ORP_KD,
     SECUREELECTRO, DELAYELECTRO,
     ELECTRORUNMODE, ELECTRORUNTIME, ELECTROLYSEMODE, PHAUTOMODE, ORPAUTOMODE, FILLAUTOMODE,
+    ELECTROLYSIS_ENABLED, ELECTROLYSIS_START_DELAY_S, ELECTROLYSIS_REVERSE_INTERVAL_MIN, ELECTROLYSIS_DEADTIME_S,
+    ELECTROLYSIS_WINDOW_S, ELECTROLYSIS_MIN_TEMP_C, ELECTROLYSIS_MAX_RUNTIME_DAY_MIN,
+    ELECTROLYSIS_ORP_LOW_PCT, ELECTROLYSIS_ORP_HIGH_PCT, REQUIRE_FLOW_SWITCH, REQUIRE_PRESSURE_OK,
     LANG_LOCALE, MQTT_IP, MQTT_PORT, MQTT_LOGIN, MQTT_PASS, MQTT_ID, MQTT_TOPIC,
     SMTP_SERVER, SMTP_PORT, SMTP_LOGIN, SMTP_PASS, SMTP_SENDER, SMTP_RECIPIENT,
     BUZZERON,
@@ -166,4 +186,3 @@ extern bool MQTTConnection;                            // MQTT connected flag
 //extern bool EmergencyStopFiltPump;                     // Filtering pump stopped manually; needs to be cleared to restart
 extern bool AntiFreezeFiltering;                       // Filtration anti freeze mode
 extern bool cleaning_done;      					   // Robot clean-up done   
-

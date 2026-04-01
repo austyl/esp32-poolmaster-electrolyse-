@@ -43,12 +43,13 @@ void EncodeBitMap()
 
   BitMap1 |= (FiltrationPump.IsRunning() & 1) << 7;
   BitMap1 |= (PhPump.IsRunning() & 1) << 6;
-  BitMap1 |= (ChlPump.IsRunning() & 1) << 5;
+  // chlorine pump is no longer controlled by ORP regulation (electrolysis refactor)
+  BitMap1 |= (PMData.ElectrolysisCellOn & 1) << 5;
   BitMap1 |= (PhPump.TankLevel() & 1) << 4;
   BitMap1 |= (ChlPump.TankLevel() & 1) << 3;
   BitMap1 |= (PSIError & 1) << 2;
   BitMap1 |= (PhPump.UpTimeError & 1) << 1;
-  BitMap1 |= (ChlPump.UpTimeError & 1) << 0;
+  BitMap1 |= (PMData.ElectrolysisFault & 1) << 0;
 
   BitMap2 |= (PhPID.GetMode() & 1) << 7;
   BitMap2 |= (OrpPID.GetMode() & 1) << 6;
@@ -64,18 +65,18 @@ void EncodeBitMap()
   BitMap3 |= (FillingPump.UpTimeError & 1)  << 5;   // 32
   BitMap3 |= (FillingPump.IsRunning() & 1) << 4;    // 16
   BitMap3 |= (PMConfig.get<bool>(ELECTROLYSEMODE) & 1) << 3;    // 8
-  BitMap3 |= (SWGPump.IsRunning() & 1) << 2;        // 4
+  BitMap3 |= (PMData.ElectrolysisCellOn & 1) << 2;        // 4
   BitMap3 |= (PMConfig.get<bool>(PHAUTOMODE) & 1) << 1;         // 2
   BitMap3 |= (PMConfig.get<bool>(ORPAUTOMODE) & 1) << 0;        // 1
 
   /*******/
-  BitMap4 |= (0 & 1U) << 7;                                       // 128
-  BitMap4 |= (0 & 1U) << 6;                                       // 64
-  BitMap4 |= (0 & 1U) << 5;                                       // 32
-  BitMap4 |= (0 & 1U) << 4;                                       // 16
-  BitMap4 |= (0 & 1U) << 3;                                       // 8
-  BitMap4 |= (0 & 1U) << 2;                                       // 4
-  BitMap4 |= (0 & 1U) << 1;                                       // 2
+  BitMap4 |= (PMData.FlowSwitchOk & 1U) << 7;                     // 128
+  BitMap4 |= (PMData.PressureOk & 1U) << 6;                       // 64
+  BitMap4 |= (PMData.ElectrolysisPolarityForward & 1U) << 5;      // 32
+  BitMap4 |= (PMData.ElectrolysisFault & 1U) << 4;                // 16
+  BitMap4 |= (PMData.ElectrolysisCellOn & 1U) << 3;               // 8
+  BitMap4 |= (PMConfig.get<bool>(REQUIRE_FLOW_SWITCH) & 1U) << 2; // 4
+  BitMap4 |= (PMConfig.get<bool>(REQUIRE_PRESSURE_OK) & 1U) << 1; // 2
   BitMap4 |= (PMConfig.get<bool>(ELECTRORUNMODE) & 1) << 0;       // 1
 }
 
@@ -150,7 +151,7 @@ void SettingsPublish(void *pvParameters)
     if (mqttClient.connected())
     {
         //send a JSON to MQTT broker. /!\ Split JSON if longer than 100 bytes
-        const int capacity = JSON_OBJECT_SIZE(8);
+        const int capacity = JSON_OBJECT_SIZE(13);
         StaticJsonDocument<capacity> root;
 
         root["pHWS"]  = PMConfig.get<unsigned long>(PHPIDWINDOWSIZE) / 1000 / 60;        //pH PID window size (/!\ mins)
@@ -216,7 +217,7 @@ void SettingsPublish(void *pvParameters)
     if (mqttClient.connected())
     {
         //send a JSON to MQTT broker. /!\ Split JSON if longer than 100 bytes
-        const int capacity = JSON_OBJECT_SIZE(8);
+        const int capacity = JSON_OBJECT_SIZE(14);
         StaticJsonDocument<capacity> root;
 
         root["pHTV"]  = PhPump.GetTankVolume();         //Acid tank nominal volume (Liters)
@@ -227,6 +228,11 @@ void SettingsPublish(void *pvParameters)
         root["SWGDel"] = PMConfig.get<uint8_t>(DELAYELECTRO);           //SWG Chlorine Generator Delay before start after pump (mn)
         root["SWGUTL"] = SWGPump.MaxUpTime / 1000 / 60;           //SWG Max Up Time (mn)
         root["FPUTL"] = FiltrationPump.MaxUpTime / 1000 / 60;           //Filtration Pump Max Up Time (mn)
+        root["EleEna"] = PMConfig.get<bool>(ELECTROLYSIS_ENABLED);
+        root["EleStD"] = PMConfig.get<uint32_t>(ELECTROLYSIS_START_DELAY_S);
+        root["EleRev"] = PMConfig.get<uint32_t>(ELECTROLYSIS_REVERSE_INTERVAL_MIN);
+        root["EleDead"] = PMConfig.get<uint32_t>(ELECTROLYSIS_DEADTIME_S);
+        root["EleWin"] = PMConfig.get<uint32_t>(ELECTROLYSIS_WINDOW_S);
 
         snprintf(tempTopicSet,sizeof(tempTopicSet),"%s/%s",PMConfig.get<const char*>(MQTT_TOPIC),PoolTopicSet5);
         remove_duplicates_slash(tempTopicSet);
@@ -341,7 +347,7 @@ void MeasuresPublish(void *pvParameters)
     {
         //send a JSON to MQTT broker. /!\ Split JSON if longer than 100 bytes
         //Will publish something like {"AcidF":100,"ChlF":100,"IO":11,"IO2":0}
-        const int capacity = JSON_OBJECT_SIZE(8);
+        const int capacity = JSON_OBJECT_SIZE(10);
         StaticJsonDocument<capacity> root;
 
         root["AcidF"] = PhPump.GetTankFill();
@@ -349,6 +355,8 @@ void MeasuresPublish(void *pvParameters)
         root["IO"]    = BitMap1;
         root["IO2"]   = BitMap2;
         root["IO3"]   = BitMap3;
+        root["ElSt"]  = PMData.ElectrolysisState;
+        root["ElDem"] = PMData.ElectrolysisDemandPct;
         root["SWGUpT"]   = SWGPump.UpTime / 1000;
         root["FIUpT"]   = FiltrationPump.UpTime / 1000; // Filtration Pump Up Time in seconds
         root["FPUpT"]   = FillingPump.UpTime / 1000; // Pool Filling Pump Up Time in seconds
@@ -383,4 +391,3 @@ void MeasuresPublish(void *pvParameters)
     WaitTimeOut = (TickType_t)PMConfig.get<unsigned long>(PUBLISHPERIOD)/portTICK_PERIOD_MS - DeltaTime;
   }
 }
-

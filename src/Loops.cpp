@@ -433,7 +433,9 @@ void OrpRegulation(void *pvParameters)
           else newChlOutput = false;
       #endif    
         /************************************************
-         turn the Chl pump on/off based on pid output
+         Electrolysis refactor (V1):
+         ORP loop no longer drives chlorine pump directly.
+         It computes an electrolysis production demand [0..100] only.
         ************************************************/
         unsigned long now = millis();
         if (now - PMData.OrpPIDwStart > PMConfig.get<double>(ORPPIDWINDOWSIZE))
@@ -441,16 +443,18 @@ void OrpRegulation(void *pvParameters)
           //time to shift the Relay Window
           PMData.OrpPIDwStart += PMConfig.get<double>(ORPPIDWINDOWSIZE);
         }
-        if ((unsigned long)PMData.OrpPIDOutput <= now - PMData.OrpPIDwStart)
-          ChlPump.Stop();
-        else
-          ChlPump.Start();
+        unsigned long on_time = (unsigned long)PMData.OrpPIDOutput;
+        unsigned long elapsed = now - PMData.OrpPIDwStart;
+        PMData.ElectrolysisDemandPct = (on_time > elapsed) ? 100U : 0U;
       } else {
         OrpPID.SetMode(MANUAL);
         PMData.Orp_RegOnOff = false;
         PMData.OrpPIDOutput = 0.0;
-        ChlPump.Stop();
+        PMData.ElectrolysisDemandPct = 0;
       } 
+    }
+    else {
+      PMData.ElectrolysisDemandPct = 0;
     }
 
     #ifdef CHRONO
@@ -463,6 +467,143 @@ void OrpRegulation(void *pvParameters)
     #endif
 
     stack_mon(hwm);    
+    vTaskDelayUntil(&ticktime,period);
+  }
+}
+
+// Electrolysis control loop:
+// - Applies long ON/OFF windows from ORP demand
+// - Handles polarity inversion with dead-time
+// - Enforces safety interlocks (filtration / flow / pressure / min water temp)
+// Mapping used in this V1:
+// - SWGPump output: IBT-2 enable (cell ON/OFF)
+// - RELAYR1: IBT-2 direction (FWD/REV)
+void ElectrolysisControl(void *pvParameters)
+{
+  while (!startTasks) ;
+  vTaskDelay(DT5);
+
+  TickType_t period = PT5;
+  TickType_t ticktime = xTaskGetTickCount();
+
+  ElectrolysisState_t state = ELECTROLYSIS_OFF;
+  bool polarity_forward = true;
+  bool window_on = false;
+  unsigned long window_on_ms = 0;
+  unsigned long state_since = millis();
+  unsigned long window_since = millis();
+  unsigned long run_acc_ms = 0;
+  unsigned long day_runtime_ms = 0;
+  uint16_t last_day = day();
+
+  auto set_outputs = [&](bool cell_on, bool forward) {
+    if (cell_on) SWGPump.Start(); else SWGPump.Stop();
+    if (forward) RELAYR1.On(); else RELAYR1.Off();
+    PMData.ElectrolysisCellOn = cell_on;
+    PMData.ElectrolysisPolarityForward = forward;
+  };
+
+  for(;;)
+  {
+    unsigned long now = millis();
+    bool enabled = PMConfig.get<bool>(ELECTROLYSIS_ENABLED);
+    bool filtration_running = FiltrationPump.IsRunning();
+    bool require_flow = PMConfig.get<bool>(REQUIRE_FLOW_SWITCH);
+    bool require_pressure = PMConfig.get<bool>(REQUIRE_PRESSURE_OK);
+    double min_temp = PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C);
+    unsigned long start_delay_ms = PMConfig.get<uint32_t>(ELECTROLYSIS_START_DELAY_S) * 1000UL;
+    unsigned long deadtime_ms = PMConfig.get<uint32_t>(ELECTROLYSIS_DEADTIME_S) * 1000UL;
+    unsigned long reverse_ms = PMConfig.get<uint32_t>(ELECTROLYSIS_REVERSE_INTERVAL_MIN) * 60UL * 1000UL;
+    unsigned long window_ms = PMConfig.get<uint32_t>(ELECTROLYSIS_WINDOW_S) * 1000UL;
+    unsigned long max_day_ms = PMConfig.get<uint32_t>(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN) * 60UL * 1000UL;
+
+    // Hardware stubs (until real wiring is available)
+    bool flow_ok = true;
+    bool pressure_ok = !PSIError && (PMData.PSIValue <= PMConfig.get<double>(PSI_HIGHTHRESHOLD));
+    PMData.FlowSwitchOk = flow_ok;
+    PMData.PressureOk = pressure_ok;
+
+    if (day() != last_day) {
+      day_runtime_ms = 0;
+      last_day = day();
+    }
+
+    uint8_t demand = PMData.ElectrolysisDemandPct;
+    if (PMData.OrpValue >= PMData.Orp_SetPoint) demand = PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_LOW_PCT);
+    if (PMData.OrpValue < PMData.Orp_SetPoint * 0.9) demand = PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_HIGH_PCT);
+    if (demand > 100) demand = 100;
+
+    if (window_ms == 0) window_ms = 1000;
+    if ((now - window_since) >= window_ms) {
+      window_since = now;
+      window_on_ms = (window_ms * demand) / 100UL;
+    }
+    window_on = ((now - window_since) < window_on_ms);
+
+    bool interlock_ok = filtration_running && (!require_flow || flow_ok) && (!require_pressure || pressure_ok)
+                        && (PMData.WaterTemp >= min_temp) && (day_runtime_ms < max_day_ms);
+
+    if (!enabled || !interlock_ok) {
+      state = (!pressure_ok && require_pressure) ? ELECTROLYSIS_FAULT : ELECTROLYSIS_OFF;
+      PMData.ElectrolysisFault = (state == ELECTROLYSIS_FAULT);
+      set_outputs(false, polarity_forward);
+      PMData.ElectrolysisState = (uint8_t)state;
+      vTaskDelayUntil(&ticktime, period);
+      continue;
+    }
+
+    switch(state)
+    {
+      case ELECTROLYSIS_OFF:
+        state = ELECTROLYSIS_WAIT_FLOW;
+        state_since = now;
+        set_outputs(false, polarity_forward);
+        break;
+
+      case ELECTROLYSIS_WAIT_FLOW:
+        set_outputs(false, polarity_forward);
+        if ((now - FiltrationPump.StartTime) >= start_delay_ms) {
+          state = polarity_forward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV;
+          state_since = now;
+        }
+        break;
+
+      case ELECTROLYSIS_RUN_FWD:
+      case ELECTROLYSIS_RUN_REV:
+        set_outputs(window_on, polarity_forward);
+        if (window_on) {
+          run_acc_ms += period * portTICK_PERIOD_MS;
+          day_runtime_ms += period * portTICK_PERIOD_MS;
+        }
+        if (run_acc_ms >= reverse_ms) {
+          run_acc_ms = 0;
+          state = ELECTROLYSIS_DEADTIME;
+          state_since = now;
+          set_outputs(false, polarity_forward);
+        }
+        break;
+
+      case ELECTROLYSIS_DEADTIME:
+        set_outputs(false, polarity_forward);
+        if ((now - state_since) >= deadtime_ms) {
+          polarity_forward = !polarity_forward;
+          state = polarity_forward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV;
+          state_since = now;
+        }
+        break;
+
+      case ELECTROLYSIS_FAULT:
+      default:
+        set_outputs(false, polarity_forward);
+        if (interlock_ok) {
+          PMData.ElectrolysisFault = false;
+          state = ELECTROLYSIS_WAIT_FLOW;
+          state_since = now;
+        }
+        break;
+    }
+
+    PMData.ElectrolysisState = (uint8_t)state;
     vTaskDelayUntil(&ticktime,period);
   }
 }
