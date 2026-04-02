@@ -1,4 +1,5 @@
 #include <Arduino.h>                // Arduino framework
+#include <math.h>
 #include "Config.h"
 #include "PoolMaster.h"
 
@@ -416,8 +417,8 @@ void OrpRegulation(void *pvParameters)
     td = millis();
     #endif 
 
-    //do not compute PID if filtration pump is not running
-    // Set also a lower limit at 30s (a lower pump duration does'nt mean anything)
+    // ORPRegulation now computes a production request only.
+    // ElectrolysisControl applies that request to the salt cell using long ON/OFF windows.
     if (OrpPID.GetMode() == AUTOMATIC) {
       if (FiltrationPump.IsRunning())
       {
@@ -433,24 +434,33 @@ void OrpRegulation(void *pvParameters)
           else newChlOutput = false;
       #endif    
         /************************************************
-         turn the Chl pump on/off based on pid output
+         Convert the PID output into a production request percentage.
+         The electrolysis task owns the physical actuator and polarity inversion.
         ************************************************/
-        unsigned long now = millis();
-        if (now - PMData.OrpPIDwStart > PMConfig.get<double>(ORPPIDWINDOWSIZE))
-        {
-          //time to shift the Relay Window
-          PMData.OrpPIDwStart += PMConfig.get<double>(ORPPIDWINDOWSIZE);
+        double lowThreshold = PMData.Orp_SetPoint * (double)PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_LOW_PCT) / 100.0;
+        double highThreshold = PMData.Orp_SetPoint * (double)PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_HIGH_PCT) / 100.0;
+        unsigned long pidWindow = PMConfig.get<unsigned long>(ORPPIDWINDOWSIZE);
+        uint8_t demandPct = 0;
+
+        if (PMData.WaterTemp >= PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C)) {
+          if (PMData.OrpValue >= highThreshold) {
+            demandPct = 0;
+          } else if (PMData.OrpValue <= lowThreshold) {
+            demandPct = 100;
+          } else if (pidWindow > 0) {
+            demandPct = (uint8_t)constrain((int)round((PMData.OrpPIDOutput * 100.0) / (double)pidWindow), 0, 100);
+          }
         }
-        if ((unsigned long)PMData.OrpPIDOutput <= now - PMData.OrpPIDwStart)
-          ChlPump.Stop();
-        else
-          ChlPump.Start();
+
+        PMData.OrpDemandPct = demandPct;
       } else {
         OrpPID.SetMode(MANUAL);
         PMData.Orp_RegOnOff = false;
         PMData.OrpPIDOutput = 0.0;
-        ChlPump.Stop();
+        PMData.OrpDemandPct = 0;
       } 
+    } else {
+      PMData.OrpDemandPct = 0;
     }
 
     #ifdef CHRONO
@@ -556,7 +566,7 @@ void getTemp(void *pvParameters)
     #endif 
 
     double temp = sensors_W.getTempC(DS18B20_W);
-    if (temp == NAN || temp == -127) {
+    if (isnan(temp) || temp == -127) {
       Debug.print(DBG_WARNING,"Error getting Water temperature");
     }  else PMData.WaterTemp = temp;
     samples_WTemp.add(PMData.WaterTemp);
@@ -564,7 +574,7 @@ void getTemp(void *pvParameters)
     Debug.print(DBG_VERBOSE,"DS18B20_W: %6.2f C",PMData.WaterTemp);
 
     temp = sensors_A.getTempC(DS18B20_A);
-    if (temp == NAN || temp == -127) {
+    if (isnan(temp) || temp == -127) {
       Debug.print(DBG_WARNING,"Error getting Air temperature");
     }  else PMData.AirTemp = temp;
     samples_ATemp.add(PMData.AirTemp);

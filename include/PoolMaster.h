@@ -69,10 +69,37 @@ struct RunTimeData {
     unsigned long PhPIDwStart, OrpPIDwStart;
     double AirTemp;
     double PhPIDOutput, OrpPIDOutput;
+    uint8_t OrpDemandPct;
     double WaterTemp;
     double PhValue, OrpValue, PSIValue;
     double Ph_SetPoint, Orp_SetPoint; // Should not be in RunTime Data, but needed for PID regulation. This way the PID regulation always know about
                                       // the setpoint, even if it changes in the program.
+};
+
+enum ElectrolysisState : uint8_t {
+    ELECTROLYSIS_OFF = 0,
+    ELECTROLYSIS_WAIT_FLOW,
+    ELECTROLYSIS_RUN_FWD,
+    ELECTROLYSIS_DEADTIME,
+    ELECTROLYSIS_RUN_REV,
+    ELECTROLYSIS_FAULT
+};
+
+struct ElectrolysisRuntimeData {
+    ElectrolysisState state;
+    bool enabled;
+    bool flowOk;
+    bool pressureOk;
+    bool outputActive;
+    bool polarityForward;
+    bool faultLatched;
+    bool flowSensorPresent;
+    bool bridgePresent;
+    uint8_t requestPct;
+    uint8_t appliedPct;
+    unsigned long stateSinceMs;
+    unsigned long windowStartMs;
+    unsigned long polarityRunMs;
 };
 
 enum ParamID {
@@ -84,6 +111,9 @@ enum ParamID {
     PH_KP, PH_KI, PH_KD, ORP_KP, ORP_KI, ORP_KD,
     SECUREELECTRO, DELAYELECTRO,
     ELECTRORUNMODE, ELECTRORUNTIME, ELECTROLYSEMODE, PHAUTOMODE, ORPAUTOMODE, FILLAUTOMODE,
+    ELECTROLYSIS_ENABLED, ELECTROLYSIS_START_DELAY_S, ELECTROLYSIS_REVERSE_INTERVAL_MIN, ELECTROLYSIS_DEADTIME_S,
+    ELECTROLYSIS_WINDOW_S, ELECTROLYSIS_MIN_TEMP_C, ELECTROLYSIS_MAX_RUNTIME_DAY_MIN, ELECTROLYSIS_ORP_LOW_PCT, ELECTROLYSIS_ORP_HIGH_PCT,
+    REQUIRE_FLOW_SWITCH, REQUIRE_PRESSURE_OK,
     LANG_LOCALE, MQTT_IP, MQTT_PORT, MQTT_LOGIN, MQTT_PASS, MQTT_ID, MQTT_TOPIC,
     SMTP_SERVER, SMTP_PORT, SMTP_LOGIN, SMTP_PASS, SMTP_SENDER, SMTP_RECIPIENT,
     BUZZERON,
@@ -113,6 +143,7 @@ extern bool PoolMaster_FullyLoaded;      // At startup gives time for everything
 
 //extern StoreStruct storage;
 extern RunTimeData PMData; // Global runtime data structure
+extern ElectrolysisRuntimeData ElectrolysisData; // Global electrolysis state shared with MQTT/UI
 
 // For NTP Synch
 extern void syncESP2RTC(uint32_t , uint32_t , uint32_t , uint32_t , uint32_t , uint32_t );
@@ -166,4 +197,8 @@ extern bool MQTTConnection;                            // MQTT connected flag
 //extern bool EmergencyStopFiltPump;                     // Filtering pump stopped manually; needs to be cleared to restart
 extern bool AntiFreezeFiltering;                       // Filtration anti freeze mode
 extern bool cleaning_done;      					   // Robot clean-up done   
+
+extern bool ElectrolysisFlowOk(void);
+extern bool ElectrolysisPressureOk(void);
+extern void ElectrolysisControl(void*);
 

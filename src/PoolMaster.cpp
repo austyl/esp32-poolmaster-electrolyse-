@@ -239,8 +239,9 @@ void SetOrpPID(bool Enable)
   if (Enable)
   {
     //Start OrpPID
-    ChlPump.ClearErrors();
+    SWGPump.ClearErrors();
     PMData.OrpPIDOutput = 0.0;
+    PMData.OrpDemandPct = 0;
     PMData.OrpPIDwStart = millis();
     OrpPID.SetMode(AUTOMATIC);
     PMData.Orp_RegOnOff = true; // Set the runtime data to true
@@ -251,6 +252,7 @@ void SetOrpPID(bool Enable)
     OrpPID.SetMode(MANUAL);
     PMData.Orp_RegOnOff = false; // Set the runtime data to false
     PMData.OrpPIDOutput = 0.0; // Reset the PID output
+    PMData.OrpDemandPct = 0;
     //ChlPump.Stop(); // Do not stop ChlPump here, it is controlled by the PID or directly by the user
   }
 }

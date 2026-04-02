@@ -252,24 +252,16 @@ void p_Mode(StaticJsonDocument<250>  &_jsonsdoc) {
     PublishSettings();
 }
 void p_Electrolyse(StaticJsonDocument<250>  &_jsonsdoc) {
-    if ((int)_jsonsdoc[F("Electrolyse")] == 1)  // activate electrolyse
-    {
-      // start electrolyse if not below minimum temperature
-      // do not take care of minimum filtering time as it 
-      // was forced on.
-      if (PMData.WaterTemp >= (double)PMConfig.get<double>(SECUREELECTRO))
-        if (!SWGPump.Start())
-          Debug.print(DBG_WARNING,"Problem starting SWG");   
-    } else {
-      if (!SWGPump.Stop())
-        Debug.print(DBG_WARNING,"Problem stopping SWG");   
-    }
-    // Direct action on Electrolyse will exit the automatic Electro Regulation Mode
-    PMConfig.put<bool>(ELECTROLYSEMODE, false);
+    bool enable = ((int)_jsonsdoc[F("Electrolyse")] == 1);
+    // Compatibility path: direct electrolysis requests now enable/disable the dedicated controller.
+    PMConfig.put<bool>(ELECTROLYSEMODE, enable);
+    PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
     PublishSettings();
 }
 void p_ElectrolyseMode(StaticJsonDocument<250>  &_jsonsdoc) {
-    PMConfig.put<bool>(ELECTROLYSEMODE, (bool)_jsonsdoc[F("ElectrolyseMode")]);
+    bool enable = (bool)_jsonsdoc[F("ElectrolyseMode")];
+    PMConfig.put<bool>(ELECTROLYSEMODE, enable);
+    PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
     PublishSettings();
 }
 void p_Winter(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -391,7 +383,7 @@ void p_pHPumpFR(StaticJsonDocument<250>  &_jsonsdoc) {
     PublishSettings();
 }
 void p_ChlPumpFR(StaticJsonDocument<250>  &_jsonsdoc) {
-    PhPump.SetFlowRate((double)_jsonsdoc[F("ChlPumpFR")] * 1000);
+    ChlPump.SetFlowRate((double)_jsonsdoc[F("ChlPumpFR")] * 1000);
     PoolDeviceManager.SavePreferences(DEVICE_CHL_PUMP);
     PublishSettings();
 }
@@ -537,6 +529,9 @@ void p_Clear(StaticJsonDocument<250>  &_jsonsdoc) {
 
     if (FillingPump.UpTimeError)
         FillingPump.ClearErrors();
+
+    if (SWGPump.UpTimeError)
+        SWGPump.ClearErrors();
 
     mqttErrorPublish(""); // publish clearing of error(s)
 }

@@ -35,9 +35,18 @@ RunTimeData PMData =
   0, 0,
   3.0, 
   0.0, 0.0,
+  0,
   28.0, 
   7.2, 720., 1.3,
   7.2, 720
+};
+
+ElectrolysisRuntimeData ElectrolysisData =
+{
+  ELECTROLYSIS_OFF,
+  false, true, true, false, true, false, false, false,
+  0, 0,
+  0, 0, 0
 };
 
 // Various global flags
@@ -165,6 +174,7 @@ void MeasuresPublish(void*);
 void StatusLights(void*);
 void UpdateTFT(void*);
 void HistoryStats(void *);
+void ElectrolysisControl(void *);
 
 // For ElegantOTA
 /*void onOTAStart(void);
@@ -267,6 +277,17 @@ void setup()
   PMConfig.initParam(PHAUTOMODE,          "PhAutoMode",             (bool)false);
   PMConfig.initParam(ORPAUTOMODE,         "OrpAutoMode",            (bool)false);
   PMConfig.initParam(FILLAUTOMODE,        "FillAutoMode",           (bool)false);
+  PMConfig.initParam(ELECTROLYSIS_ENABLED,"ElectrolysisEnabled",    (bool)false);
+  PMConfig.initParam(ELECTROLYSIS_START_DELAY_S,"ElectrolysisDelayS",(unsigned long)30);
+  PMConfig.initParam(ELECTROLYSIS_REVERSE_INTERVAL_MIN,"ElectrolysisRevMin",(unsigned long)180);
+  PMConfig.initParam(ELECTROLYSIS_DEADTIME_S,"ElectrolysisDeadS",   (unsigned long)5);
+  PMConfig.initParam(ELECTROLYSIS_WINDOW_S,"ElectrolysisWindowS",   (unsigned long)300);
+  PMConfig.initParam(ELECTROLYSIS_MIN_TEMP_C,"ElectrolysisMinTemp", (double)15.0);
+  PMConfig.initParam(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN,"ElectrolysisMaxDayMin",(unsigned long)480);
+  PMConfig.initParam(ELECTROLYSIS_ORP_LOW_PCT,"ElectrolysisLowPct", (uint8_t)95);
+  PMConfig.initParam(ELECTROLYSIS_ORP_HIGH_PCT,"ElectrolysisHighPct",(uint8_t)100);
+  PMConfig.initParam(REQUIRE_FLOW_SWITCH, "RequireFlowSwitch",      (bool)false);
+  PMConfig.initParam(REQUIRE_PRESSURE_OK, "RequirePressureOk",      (bool)true);
   PMConfig.initParam(LANG_LOCALE,         "LangLocale",             (uint8_t)0);
   PMConfig.initParam(MQTT_IP,             "MqttIP",                 (uint32_t)IPAddress(192,168,0,0));
   PMConfig.initParam(MQTT_PORT,           "MqttPort",               (uint32_t)1883);
@@ -291,6 +312,17 @@ void setup()
   // Warning: pins used here have no pull-ups, provide external ones
   pinMode(CHL_LEVEL, INPUT);
   pinMode(PH_LEVEL, INPUT);
+  if (FLOW_SWITCH_PIN >= 0) {
+    pinMode(FLOW_SWITCH_PIN, INPUT);
+  }
+  if (IBT2_FWD_PIN >= 0) {
+    pinMode(IBT2_FWD_PIN, OUTPUT);
+    digitalWrite(IBT2_FWD_PIN, LOW);
+  }
+  if (IBT2_REV_PIN >= 0) {
+    pinMode(IBT2_REV_PIN, OUTPUT);
+    digitalWrite(IBT2_REV_PIN, LOW);
+  }
 
   // Initialize default's devices name
   FiltrationPump.SetName("Filtration Pump");
@@ -312,13 +344,14 @@ void setup()
   // Default values for the pumps
   FillingPump.SetMinUpTime(5*60*1000);  // Minimum running uptime for Filling Pump is 5 minutes (avoir short runs)
   FiltrationPump.SetMaxUpTime(0); // No Maximum uptime for Filtration Pump
+  SWGPump.SetMaxUpTime(PMConfig.get<unsigned long>(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN) * 60UL * 1000UL);
 
   // Initialize the state machine handlers for the pumps
   FillingPump.SetHandlers(FillingPump_StartCondition,FillingPump_StopCondition,FillingPump_StartAction,FillingPump_StopAction);
   FiltrationPump.SetHandlers(FiltrationPump_StartCondition,FiltrationPump_StopCondition,FiltrationPump_StartAction,FiltrationPump_StopAction);
   FiltrationPump.SetLoopHandler(FiltrationPump_LoopActions);
   RobotPump.SetHandlers(RobotPump_StartCondition,RobotPump_StopCondition,RobotPump_StartAction,RobotPump_StopAction);
-  SWGPump.SetHandlers(SWGPump_StartCondition,SWGPump_StopCondition,SWGPump_StartAction,SWGPump_StopAction);
+  // ElectrolysisControl now owns the SWG output state, so we keep SWGPump as a logical actuator only.
 
   // Fill DeviceManager with the list of devices
   PoolDeviceManager.AddDevice(DEVICE_FILTPUMP,&FiltrationPump);
@@ -449,6 +482,16 @@ void setup()
     OrpRegulation,
     "ORPRegulation",
     2048,
+    NULL,
+    1,
+    nullptr,
+    app_cpu
+  );
+
+  xTaskCreatePinnedToCore(
+    ElectrolysisControl,
+    "ElectrolysisControl",
+    4096,
     NULL,
     1,
     nullptr,

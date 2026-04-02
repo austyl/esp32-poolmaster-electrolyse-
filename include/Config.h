@@ -55,6 +55,16 @@
 #define SWG_PUMP        13
 #define FILL_PUMP       23
 
+// IBT-2 bridge pins used to drive the salt cell polarity.
+// Keep them at -1 until the hardware is wired; ElectrolysisControl will stay in stub mode.
+#define IBT2_FWD_PIN    -1
+#define IBT2_REV_PIN    -1
+
+// Optional flow switch dedicated to electrolysis safety.
+// Keep it at -1 until the hardware is wired; the software can still run with require_flow_switch=false.
+#define FLOW_SWITCH_PIN -1
+#define FLOW_SWITCH_ACTIVE_STATE HIGH
+
 #define ALL_PINS        "4|13|23|25|26|27|32|33" // List of all usable PINs on the ESP32 (to be sent to Nextion)
 
 //Digital input pins connected to Acid and Chl tank level reed switches
@@ -144,6 +154,7 @@
 // T9: PublishSettings 
 // T10: Nextion Screen Refresh On (/2 when screen on, /4 if menu page for faster refresh)
 // T11: Every 2 minutes, statistics recording, MQTT and NTP reconnects
+// T12: ElectrolysisControl
 
 //Periods 
 // Task9 period is initialized with PUBLISHINTERVAL and can be changed dynamically
@@ -158,6 +169,7 @@
 #define PT9 1000
 #define PT10 1000
 #define PT11 120000 // Run once every 2 minutes
+#define PT12 1000
 
 
 //Start offsets to spread tasks along time
@@ -172,6 +184,7 @@
 #define DT9 940/portTICK_PERIOD_MS
 #define DT10 50/portTICK_PERIOD_MS
 #define DT11 2000/portTICK_PERIOD_MS
+#define DT12 680/portTICK_PERIOD_MS
 
 //#define CHRONO                    // Activate tasks timings traces for profiling
 //#define SIMU                      // Used to simulate pH/ORP sensors. Very simple simulation:
