@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Config.h"
 #include "PoolMaster.h"
+#include "InputSimulation.h"
 
 namespace {
 bool isConfiguredPin(int pin)
@@ -16,11 +17,15 @@ bool electrolysisEnabled()
 
 bool readFlowSwitchRaw()
 {
+#ifdef SIMULATE_PHYSICAL_INPUTS
+  return InputSimulation::flowOk();
+#else
   if (!isConfiguredPin(FLOW_SWITCH_PIN)) {
     // Stub mode before the input is wired: report "flow OK" while filtration runs.
     return FiltrationPump.IsRunning();
   }
   return digitalRead(FLOW_SWITCH_PIN) == FLOW_SWITCH_ACTIVE_STATE;
+#endif
 }
 
 void setBridgeOutputs(bool enable, bool forward)

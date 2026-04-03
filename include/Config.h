@@ -191,3 +191,11 @@
                                     // the sensor value is computed from the output of the PID 
                                     // loop to reach linearly the theorical value produced by this
                                     // output after one hour
+
+// Optional local overrides for credentials, upload targets and hardware pins.
+// Create include/Config.local.h from the provided template to keep project defaults untouched.
+#ifdef __has_include
+  #if __has_include("Config.local.h")
+    #include "Config.local.h"
+  #endif
+#endif

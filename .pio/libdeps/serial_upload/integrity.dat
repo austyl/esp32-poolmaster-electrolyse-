@@ -1,0 +1,11 @@
+milesburton/DallasTemperature @ 3.9.1
+marvinroger/AsyncMqttClient @ 0.9.0
+mobizt/ESP Mail Client@^3.4.21
+br3ttb/PID @ 1.2.1
+ADS1115=https://lygte-info.dk/pic/Projects/ADS1115Library/ADS1115.zip
+robtillaart/RunningMedian @ 0.3.9
+rlogiacco/CircularBuffer@^1.4.0
+yiannisbourkelis/Uptime Library@^1.0.0
+bblanchon/ArduinoJson @ 6.17.2
+Arduino_DebugUtils @ 1.4.0
+paulstoffregen/Time @ 1.6

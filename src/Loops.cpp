@@ -2,6 +2,7 @@
 #include <math.h>
 #include "Config.h"
 #include "PoolMaster.h"
+#include "InputSimulation.h"
 
 // Setup oneWire instances to communicate with temperature sensors (one bus per sensor)
 static OneWire oneWire_W(ONE_WIRE_BUS_W);
@@ -67,6 +68,22 @@ void AnalogPoll(void *pvParameters)
 {
   while (!startTasks) ;
 
+#ifdef SIMULATE_PHYSICAL_INPUTS
+  TickType_t period = PT1;
+  TickType_t ticktime = xTaskGetTickCount();
+  static UBaseType_t hwm = 0;
+
+  for(;;)
+  {
+    InputSimulation::update();
+    PMData.PhValue = InputSimulation::ph();
+    PMData.OrpValue = InputSimulation::orp();
+    PMData.PSIValue = InputSimulation::psi();
+    stack_mon(hwm);
+    vTaskDelayUntil(&ticktime,period);
+  }
+#else
+
   TickType_t period = PT1;  
   TickType_t ticktime = xTaskGetTickCount(); 
   static UBaseType_t hwm=0;
@@ -119,6 +136,7 @@ void AnalogPoll(void *pvParameters)
     stack_mon(hwm);
     vTaskDelayUntil(&ticktime,period);
   }  
+#endif
 }
 
 #else //EXT_ADS1115
@@ -480,6 +498,10 @@ void OrpRegulation(void *pvParameters)
 //Init DS18B20 one-wire library
 void TempInit()
 {
+#ifdef SIMULATE_PHYSICAL_INPUTS
+  Debug.print(DBG_INFO,"Temperature sensors simulation enabled");
+  return;
+#else
   bool error = false;
   char buf[64];
   // Start up the library
@@ -535,6 +557,7 @@ void TempInit()
     sensors_W.setWaitForConversion(false);
     sensors_A.setWaitForConversion(false);
   }
+#endif
 }
 
 //Request temperature asynchronously
@@ -547,6 +570,17 @@ void getTemp(void *pvParameters)
   TickType_t period = PT4;  
   TickType_t ticktime = xTaskGetTickCount();
   static UBaseType_t hwm = 0;
+
+#ifdef SIMULATE_PHYSICAL_INPUTS
+  for(;;)
+  {
+    InputSimulation::update();
+    PMData.WaterTemp = InputSimulation::waterTemp();
+    PMData.AirTemp = InputSimulation::airTemp();
+    stack_mon(hwm);
+    vTaskDelayUntil(&ticktime,period);
+  }
+#else
 
   #ifdef CHRONO
   unsigned long td;
@@ -596,4 +630,5 @@ void getTemp(void *pvParameters)
     stack_mon(hwm);
     vTaskDelayUntil(&ticktime,period);
   }
+#endif
 }
