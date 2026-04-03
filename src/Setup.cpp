@@ -44,8 +44,8 @@ RunTimeData PMData =
 ElectrolysisRuntimeData ElectrolysisData =
 {
   ELECTROLYSIS_OFF,
-  false, true, true, false, true, false, false, false,
-  0, 0,
+  false, true, true, false, true, false, false, false, false, true,
+  0, 0, 0, 0.0,
   0, 0, 0
 };
 
@@ -279,15 +279,17 @@ void setup()
   PMConfig.initParam(FILLAUTOMODE,        "FillAutoMode",           (bool)false);
   PMConfig.initParam(ELECTROLYSIS_ENABLED,"ElectrolysisEnabled",    (bool)false);
   PMConfig.initParam(ELECTROLYSIS_START_DELAY_S,"ElectrolysisDelayS",(unsigned long)30);
-  PMConfig.initParam(ELECTROLYSIS_REVERSE_INTERVAL_MIN,"ElectrolysisRevMin",(unsigned long)180);
-  PMConfig.initParam(ELECTROLYSIS_DEADTIME_S,"ElectrolysisDeadS",   (unsigned long)5);
-  PMConfig.initParam(ELECTROLYSIS_WINDOW_S,"ElectrolysisWindowS",   (unsigned long)300);
+  PMConfig.initParam(ELECTROLYSIS_REVERSE_INTERVAL_MIN,"ElectrolysisRevMin",(unsigned long)240);
+  PMConfig.initParam(ELECTROLYSIS_DEADTIME_S,"ElectrolysisDeadS",   (unsigned long)60);
+  PMConfig.initParam(ELECTROLYSIS_WINDOW_S,"ElectrolysisWindowS",   (unsigned long)600);
   PMConfig.initParam(ELECTROLYSIS_MIN_TEMP_C,"ElectrolysisMinTemp", (double)15.0);
   PMConfig.initParam(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN,"ElectrolysisMaxDayMin",(unsigned long)480);
   PMConfig.initParam(ELECTROLYSIS_ORP_LOW_PCT,"ElectrolysisLowPct", (uint8_t)95);
   PMConfig.initParam(ELECTROLYSIS_ORP_HIGH_PCT,"ElectrolysisHighPct",(uint8_t)100);
   PMConfig.initParam(REQUIRE_FLOW_SWITCH, "RequireFlowSwitch",      (bool)false);
   PMConfig.initParam(REQUIRE_PRESSURE_OK, "RequirePressureOk",      (bool)true);
+  PMConfig.initParam(ELECTROLYSIS_CURRENT_MIN_A, "ElectrolysisCurrentMinA", (double)0.5);
+  PMConfig.initParam(ELECTROLYSIS_CURRENT_MAX_A, "ElectrolysisCurrentMaxA", (double)25.0);
   PMConfig.initParam(LANG_LOCALE,         "LangLocale",             (uint8_t)0);
   PMConfig.initParam(MQTT_IP,             "MqttIP",                 (uint32_t)IPAddress(192,168,0,0));
   PMConfig.initParam(MQTT_PORT,           "MqttPort",               (uint32_t)1883);
@@ -314,6 +316,9 @@ void setup()
   pinMode(PH_LEVEL, INPUT);
   if (FLOW_SWITCH_PIN >= 0) {
     pinMode(FLOW_SWITCH_PIN, INPUT);
+  }
+  if (CELL_CURRENT_PIN >= 0) {
+    pinMode(CELL_CURRENT_PIN, INPUT);
   }
   if (IBT2_FWD_PIN >= 0) {
     pinMode(IBT2_FWD_PIN, OUTPUT);
@@ -711,4 +716,3 @@ void loop()
   delay(1000);
   vTaskDelete(nullptr);
 }
-

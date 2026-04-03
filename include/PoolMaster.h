@@ -95,11 +95,27 @@ struct ElectrolysisRuntimeData {
     bool faultLatched;
     bool flowSensorPresent;
     bool bridgePresent;
+    bool currentSensorPresent;
+    bool currentOk;
     uint8_t requestPct;
     uint8_t appliedPct;
+    uint16_t faultFlags;
+    double cellCurrentA;
     unsigned long stateSinceMs;
     unsigned long windowStartMs;
     unsigned long polarityRunMs;
+};
+
+enum ElectrolysisFaultBits : uint16_t {
+    EL_FAULT_NONE = 0,
+    EL_FAULT_PUMP_OFF = 1 << 0,
+    EL_FAULT_FLOW = 1 << 1,
+    EL_FAULT_PRESSURE = 1 << 2,
+    EL_FAULT_TEMP = 1 << 3,
+    EL_FAULT_SENSORS = 1 << 4,
+    EL_FAULT_BRIDGE = 1 << 5,
+    EL_FAULT_RUNTIME = 1 << 6,
+    EL_FAULT_CURRENT = 1 << 7
 };
 
 enum ParamID {
@@ -113,7 +129,7 @@ enum ParamID {
     ELECTRORUNMODE, ELECTRORUNTIME, ELECTROLYSEMODE, PHAUTOMODE, ORPAUTOMODE, FILLAUTOMODE,
     ELECTROLYSIS_ENABLED, ELECTROLYSIS_START_DELAY_S, ELECTROLYSIS_REVERSE_INTERVAL_MIN, ELECTROLYSIS_DEADTIME_S,
     ELECTROLYSIS_WINDOW_S, ELECTROLYSIS_MIN_TEMP_C, ELECTROLYSIS_MAX_RUNTIME_DAY_MIN, ELECTROLYSIS_ORP_LOW_PCT, ELECTROLYSIS_ORP_HIGH_PCT,
-    REQUIRE_FLOW_SWITCH, REQUIRE_PRESSURE_OK,
+    REQUIRE_FLOW_SWITCH, REQUIRE_PRESSURE_OK, ELECTROLYSIS_CURRENT_MIN_A, ELECTROLYSIS_CURRENT_MAX_A,
     LANG_LOCALE, MQTT_IP, MQTT_PORT, MQTT_LOGIN, MQTT_PASS, MQTT_ID, MQTT_TOPIC,
     SMTP_SERVER, SMTP_PORT, SMTP_LOGIN, SMTP_PASS, SMTP_SENDER, SMTP_RECIPIENT,
     BUZZERON,
@@ -201,4 +217,3 @@ extern bool cleaning_done;      					   // Robot clean-up done
 extern bool ElectrolysisFlowOk(void);
 extern bool ElectrolysisPressureOk(void);
 extern void ElectrolysisControl(void*);
-

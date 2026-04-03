@@ -150,7 +150,7 @@ void SettingsPublish(void *pvParameters)
     if (mqttClient.connected())
     {
         //send a JSON to MQTT broker. /!\ Split JSON if longer than 100 bytes
-        const int capacity = JSON_OBJECT_SIZE(19);
+        const int capacity = JSON_OBJECT_SIZE(21);
         StaticJsonDocument<capacity> root;
 
         root["pHWS"]  = PMConfig.get<unsigned long>(PHPIDWINDOWSIZE) / 1000 / 60;        //pH PID window size (/!\ mins)
@@ -238,6 +238,8 @@ void SettingsPublish(void *pvParameters)
         root["ElHP"] = PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_HIGH_PCT);
         root["ElRQF"] = PMConfig.get<bool>(REQUIRE_FLOW_SWITCH);
         root["ElRQP"] = PMConfig.get<bool>(REQUIRE_PRESSURE_OK);
+        root["ElCMN"] = PMConfig.get<double>(ELECTROLYSIS_CURRENT_MIN_A) * 100;
+        root["ElCMX"] = PMConfig.get<double>(ELECTROLYSIS_CURRENT_MAX_A) * 100;
 
         snprintf(tempTopicSet,sizeof(tempTopicSet),"%s/%s",PMConfig.get<const char*>(MQTT_TOPIC),PoolTopicSet5);
         remove_duplicates_slash(tempTopicSet);
@@ -355,7 +357,7 @@ void MeasuresPublish(void *pvParameters)
     {
         //send a JSON to MQTT broker. /!\ Split JSON if longer than 100 bytes
         //Will publish something like {"AcidF":100,"ChlF":100,"IO":11,"IO2":0}
-        const int capacity = JSON_OBJECT_SIZE(13);
+        const int capacity = JSON_OBJECT_SIZE(16);
         StaticJsonDocument<capacity> root;
 
         root["AcidF"] = PhPump.GetTankFill();
@@ -370,7 +372,10 @@ void MeasuresPublish(void *pvParameters)
         root["ElPrs"] = ElectrolysisData.pressureOk;
         root["ElPol"] = ElectrolysisData.polarityForward ? 0 : 1;
         root["ElFlt"] = ElectrolysisData.faultLatched;
+        root["ElFM"]  = ElectrolysisData.faultFlags;
         root["ElHW"]  = ElectrolysisData.bridgePresent;
+        root["ElCur"] = ElectrolysisData.cellCurrentA * 100;
+        root["ElCurO"] = ElectrolysisData.currentOk;
 
         snprintf(tempTopicMeas,sizeof(tempTopicMeas),"%s/%s",PMConfig.get<const char*>(MQTT_TOPIC),PoolTopicMeas2);
         remove_duplicates_slash(tempTopicMeas);
@@ -402,4 +407,3 @@ void MeasuresPublish(void *pvParameters)
     WaitTimeOut = (TickType_t)PMConfig.get<unsigned long>(PUBLISHPERIOD)/portTICK_PERIOD_MS - DeltaTime;
   }
 }
-
