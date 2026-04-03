@@ -65,6 +65,12 @@
 #define FLOW_SWITCH_PIN -1
 #define FLOW_SWITCH_ACTIVE_STATE HIGH
 
+// Optional analog input used to monitor electrolysis cell current (in Amps).
+// Keep it at -1 until the sensor is wired.
+#define CELL_CURRENT_PIN -1
+#define CELL_CURRENT_ADC_MAX 4095.0
+#define CELL_CURRENT_MAX_A   30.0
+
 #define ALL_PINS        "4|13|23|25|26|27|32|33" // List of all usable PINs on the ESP32 (to be sent to Nextion)
 
 //Digital input pins connected to Acid and Chl tank level reed switches

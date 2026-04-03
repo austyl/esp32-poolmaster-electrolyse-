@@ -39,6 +39,7 @@ const std::map<std::string, std::function<void(StaticJsonDocument<250> &_jsonsdo
     {"PSILow",          p_PSILow         },
     {"pHPumpFR",        p_pHPumpFR       },
     {"ChlPumpFR",       p_ChlPumpFR      },
+    {"ElectrolysisDuty",p_ElectrolysisDuty},
     {"RstpHCal",        p_RstpHCal       },
     {"RstOrpCal",       p_RstOrpCal      },
     {"RstPSICal",       p_RstPSICal      },
@@ -48,6 +49,7 @@ const std::map<std::string, std::function<void(StaticJsonDocument<250> &_jsonsdo
     {"PhPump",          p_PhPump         },
     {"FillPump",        p_FillPump       },
     {"ChlPump",         p_ChlPump        },
+    {"ElectrolysisEnable", p_ElectrolysisEnable},
     {"PhPID",           p_PhPID          },
     {"PhAutoMode",      p_PhAutoMode     },
     {"OrpPID",          p_OrpPID         },
@@ -59,6 +61,7 @@ const std::map<std::string, std::function<void(StaticJsonDocument<250> &_jsonsdo
     {"ElectroConfig",   p_ElectroConfig  },
     {"SecureElectro",   p_SecureElectro  },
     {"DelayElectro",    p_DelayElectro   },
+    {"ElectrolysisConfig", p_ElectrolysisConfig},
     {"ElectroRunMode",  p_ElectroRunMode },
     {"ElectroRuntime",  p_ElectroRuntime },
     {"SetDateTime",     p_SetDateTime    },
@@ -387,6 +390,9 @@ void p_ChlPumpFR(StaticJsonDocument<250>  &_jsonsdoc) {
     PoolDeviceManager.SavePreferences(DEVICE_CHL_PUMP);
     PublishSettings();
 }
+void p_ElectrolysisDuty(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMData.OrpDemandPct = (uint8_t)constrain((int)_jsonsdoc[F("ElectrolysisDuty")], 0, 100);
+}
 void p_RstpHCal(StaticJsonDocument<250>  &_jsonsdoc) {
     PMConfig.put<double>(PHCALIBCOEFFS0, (double)-2.50133333);
     PMConfig.put<double>(PHCALIBCOEFFS1, (double)6.9);
@@ -464,13 +470,16 @@ void p_FillPump(StaticJsonDocument<250>  &_jsonsdoc) {
     PublishSettings();
  }
 void p_ChlPump(StaticJsonDocument<250>  &_jsonsdoc) {
-    if ((bool)_jsonsdoc[F("ChlPump")])
-        ChlPump.Start();     //start Chl pump  
-    else
-        ChlPump.Stop();      //stop Chl pump      
-
-    PMConfig.put<bool>(ORPAUTOMODE, false);
-    if (PMConfig.get<bool>(ORPAUTOMODE) == 0) SetOrpPID(false);
+    // Backward compatibility: "ChlPump" is now interpreted as electrolysis enable.
+    bool enable = (bool)_jsonsdoc[F("ChlPump")];
+    PMConfig.put<bool>(ELECTROLYSEMODE, enable);
+    PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
+    PublishSettings();
+}
+void p_ElectrolysisEnable(StaticJsonDocument<250>  &_jsonsdoc) {
+    bool enable = (bool)_jsonsdoc[F("ElectrolysisEnable")];
+    PMConfig.put<bool>(ELECTROLYSEMODE, enable);
+    PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
     PublishSettings();
 }
 void p_PhPID(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -548,6 +557,29 @@ void p_SecureElectro(StaticJsonDocument<250>  &_jsonsdoc) {
 }
 void p_DelayElectro(StaticJsonDocument<250>  &_jsonsdoc) {
     PMConfig.put<uint8_t>(DELAYELECTRO, (uint8_t)_jsonsdoc[F("DelayElectro")]);
+    PMConfig.put<unsigned long>(ELECTROLYSIS_START_DELAY_S, (unsigned long)_jsonsdoc[F("DelayElectro")] * 60UL);
+    PublishSettings();
+}
+void p_ElectrolysisConfig(StaticJsonDocument<250>  &_jsonsdoc) {
+    JsonObject cfg = _jsonsdoc[F("ElectrolysisConfig")];
+    if (cfg.containsKey("electrolysis_enabled")) {
+      bool enable = cfg["electrolysis_enabled"].as<bool>();
+      PMConfig.put<bool>(ELECTROLYSEMODE, enable);
+      PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
+    }
+    if (cfg.containsKey("electrolysis_window_s")) PMConfig.put<unsigned long>(ELECTROLYSIS_WINDOW_S, cfg["electrolysis_window_s"].as<unsigned long>());
+    if (cfg.containsKey("reverse_interval_min")) PMConfig.put<unsigned long>(ELECTROLYSIS_REVERSE_INTERVAL_MIN, cfg["reverse_interval_min"].as<unsigned long>());
+    if (cfg.containsKey("reverse_deadtime_s")) PMConfig.put<unsigned long>(ELECTROLYSIS_DEADTIME_S, cfg["reverse_deadtime_s"].as<unsigned long>());
+    if (cfg.containsKey("min_temp_for_chlorination")) PMConfig.put<double>(ELECTROLYSIS_MIN_TEMP_C, cfg["min_temp_for_chlorination"].as<double>());
+    if (cfg.containsKey("max_daily_runtime_min")) {
+      unsigned long maxDaily = cfg["max_daily_runtime_min"].as<unsigned long>();
+      PMConfig.put<unsigned long>(ELECTROLYSIS_MAX_RUNTIME_DAY_MIN, maxDaily);
+      SWGPump.SetMaxUpTime(maxDaily * 60UL * 1000UL);
+    }
+    if (cfg.containsKey("require_flow_switch")) PMConfig.put<bool>(REQUIRE_FLOW_SWITCH, cfg["require_flow_switch"].as<bool>());
+    if (cfg.containsKey("require_pressure_ok")) PMConfig.put<bool>(REQUIRE_PRESSURE_OK, cfg["require_pressure_ok"].as<bool>());
+    if (cfg.containsKey("current_min_a")) PMConfig.put<double>(ELECTROLYSIS_CURRENT_MIN_A, cfg["current_min_a"].as<double>());
+    if (cfg.containsKey("current_max_a")) PMConfig.put<double>(ELECTROLYSIS_CURRENT_MAX_A, cfg["current_max_a"].as<double>());
     PublishSettings();
 }
 void p_ElectroRunMode(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -616,4 +648,3 @@ void p_PINConfig(StaticJsonDocument<250>  &_jsonsdoc) {
     tmp_device->Begin();
     PoolDeviceManager.SavePreferences(temp_index);
 }
-

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 #include "Config.h"
 #include "PoolMaster.h"
 
@@ -21,6 +22,20 @@ bool readFlowSwitchRaw()
     return FiltrationPump.IsRunning();
   }
   return digitalRead(FLOW_SWITCH_PIN) == FLOW_SWITCH_ACTIVE_STATE;
+}
+
+double readCellCurrentA()
+{
+  if (!isConfiguredPin(CELL_CURRENT_PIN)) {
+    return 0.0;
+  }
+  const int raw = analogRead(CELL_CURRENT_PIN);
+  return ((double)raw / CELL_CURRENT_ADC_MAX) * CELL_CURRENT_MAX_A;
+}
+
+bool criticalSensorsValid()
+{
+  return isfinite(PMData.OrpValue) && isfinite(PMData.PSIValue) && isfinite(PMData.WaterTemp);
 }
 
 void setBridgeOutputs(bool enable, bool forward)
@@ -92,6 +107,7 @@ void ElectrolysisControl(void *pvParameters)
 
   ElectrolysisData.bridgePresent = isConfiguredPin(IBT2_FWD_PIN) && isConfiguredPin(IBT2_REV_PIN);
   ElectrolysisData.flowSensorPresent = isConfiguredPin(FLOW_SWITCH_PIN);
+  ElectrolysisData.currentSensorPresent = isConfiguredPin(CELL_CURRENT_PIN);
 
   for (;;)
   {
@@ -108,12 +124,36 @@ void ElectrolysisControl(void *pvParameters)
     ElectrolysisData.flowOk = ElectrolysisFlowOk();
     ElectrolysisData.pressureOk = ElectrolysisPressureOk();
     ElectrolysisData.requestPct = PMData.OrpDemandPct;
+    ElectrolysisData.cellCurrentA = readCellCurrentA();
 
     const bool filtrationRunning = FiltrationPump.IsRunning();
     const bool tempOk = PMData.WaterTemp >= PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C);
     const bool requestActive = ElectrolysisData.requestPct > 0;
     const bool startDelayElapsed = (now - FiltrationPump.StartTime) >= startDelayMs;
-    const bool hardFault = filtrationRunning && !ElectrolysisData.pressureOk;
+    const bool probesOk = criticalSensorsValid();
+
+    ElectrolysisData.currentOk = true;
+    if (ElectrolysisData.currentSensorPresent && ElectrolysisData.outputActive) {
+      const double minCurrentA = PMConfig.get<double>(ELECTROLYSIS_CURRENT_MIN_A);
+      const double maxCurrentA = PMConfig.get<double>(ELECTROLYSIS_CURRENT_MAX_A);
+      ElectrolysisData.currentOk =
+          (ElectrolysisData.cellCurrentA >= minCurrentA) &&
+          (ElectrolysisData.cellCurrentA <= maxCurrentA);
+    }
+
+    ElectrolysisData.faultFlags = EL_FAULT_NONE;
+    if (!filtrationRunning) ElectrolysisData.faultFlags |= EL_FAULT_PUMP_OFF;
+    if (!ElectrolysisData.flowOk) ElectrolysisData.faultFlags |= EL_FAULT_FLOW;
+    if (!ElectrolysisData.pressureOk) ElectrolysisData.faultFlags |= EL_FAULT_PRESSURE;
+    if (!tempOk) ElectrolysisData.faultFlags |= EL_FAULT_TEMP;
+    if (!probesOk) ElectrolysisData.faultFlags |= EL_FAULT_SENSORS;
+    if (!ElectrolysisData.bridgePresent) ElectrolysisData.faultFlags |= EL_FAULT_BRIDGE;
+    if (SWGPump.UpTimeError) ElectrolysisData.faultFlags |= EL_FAULT_RUNTIME;
+    if (!ElectrolysisData.currentOk) ElectrolysisData.faultFlags |= EL_FAULT_CURRENT;
+
+    const bool blockingFault = (ElectrolysisData.faultFlags &
+                              (EL_FAULT_PRESSURE | EL_FAULT_SENSORS | EL_FAULT_RUNTIME | EL_FAULT_CURRENT)) != 0;
+    const bool waitFlowOrDelay = !ElectrolysisData.flowOk || !startDelayElapsed;
 
     if (!filtrationRunning || !ElectrolysisData.enabled || !tempOk || !requestActive) {
       setBridgeOutputs(false, ElectrolysisData.polarityForward);
@@ -126,7 +166,7 @@ void ElectrolysisControl(void *pvParameters)
       continue;
     }
 
-    if (hardFault || SWGPump.UpTimeError) {
+    if (blockingFault) {
       setBridgeOutputs(false, ElectrolysisData.polarityForward);
       ElectrolysisData.outputActive = false;
       ElectrolysisData.appliedPct = 0;
@@ -136,20 +176,11 @@ void ElectrolysisControl(void *pvParameters)
       continue;
     }
 
-    if (!startDelayElapsed) {
+    if (waitFlowOrDelay) {
       setBridgeOutputs(false, ElectrolysisData.polarityForward);
       ElectrolysisData.outputActive = false;
       ElectrolysisData.appliedPct = 0;
       enterState(ELECTROLYSIS_WAIT_FLOW, now);
-      vTaskDelayUntil(&ticktime, period);
-      continue;
-    }
-
-    if (!ElectrolysisData.flowOk) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
-      enterState(ELECTROLYSIS_OFF, now);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
