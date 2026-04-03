@@ -5,12 +5,59 @@
 #include "InputSimulation.h"
 
 namespace {
-double simWaterTemp = 24.0;
-double simAirTemp = 20.0;
-double simPh = 7.20;
-double simOrp = 690.0;
-double simPsi = 0.05;
+constexpr double kDefaultWaterTemp = 24.0;
+constexpr double kDefaultAirTemp = 20.0;
+constexpr double kDefaultPh = 7.20;
+constexpr double kDefaultOrp = 690.0;
+constexpr double kDefaultPsi = 0.05;
+
+double simWaterTemp = kDefaultWaterTemp;
+double simAirTemp = kDefaultAirTemp;
+double simPh = kDefaultPh;
+double simOrp = kDefaultOrp;
+double simPsi = kDefaultPsi;
 unsigned long lastUpdateMs = 0;
+
+struct DoubleOverride {
+  bool enabled = false;
+  double value = 0.0;
+};
+
+struct BoolOverride {
+  bool enabled = false;
+  bool value = false;
+};
+
+DoubleOverride waterTempOverride;
+DoubleOverride airTempOverride;
+DoubleOverride phOverride;
+DoubleOverride orpOverride;
+DoubleOverride psiOverride;
+BoolOverride flowOverride;
+
+void applyOverrides()
+{
+  if (waterTempOverride.enabled) {
+    simWaterTemp = waterTempOverride.value;
+  }
+  if (airTempOverride.enabled) {
+    simAirTemp = airTempOverride.value;
+  }
+  if (phOverride.enabled) {
+    simPh = phOverride.value;
+  }
+  if (orpOverride.enabled) {
+    simOrp = orpOverride.value;
+  }
+  if (psiOverride.enabled) {
+    simPsi = psiOverride.value;
+  }
+}
+
+void logOverride(const char* label, double value)
+{
+  Debug.print(DBG_INFO, "[SIM] %s forced to %.2f", label, value);
+}
 }
 
 namespace InputSimulation {
@@ -19,6 +66,7 @@ void update()
   const unsigned long now = millis();
   if (lastUpdateMs == 0) {
     lastUpdateMs = now;
+    applyOverrides();
     return;
   }
 
@@ -54,6 +102,8 @@ void update()
     simPh += dtSeconds * 0.00005;
   }
   simPh = constrain(simPh, 6.8, 7.8);
+
+  applyOverrides();
 }
 
 double waterTemp() { return simWaterTemp; }
@@ -61,5 +111,77 @@ double airTemp() { return simAirTemp; }
 double ph() { return simPh; }
 double orp() { return simOrp; }
 double psi() { return simPsi; }
-bool flowOk() { return FiltrationPump.IsRunning(); }
+bool flowOk()
+{
+  if (flowOverride.enabled) {
+    return flowOverride.value;
+  }
+  return FiltrationPump.IsRunning();
+}
+
+void setWaterTemp(double value)
+{
+  waterTempOverride.enabled = true;
+  waterTempOverride.value = constrain(value, -20.0, 80.0);
+  simWaterTemp = waterTempOverride.value;
+  logOverride("WaterTemp", simWaterTemp);
+}
+
+void setAirTemp(double value)
+{
+  airTempOverride.enabled = true;
+  airTempOverride.value = constrain(value, -20.0, 80.0);
+  simAirTemp = airTempOverride.value;
+  logOverride("AirTemp", simAirTemp);
+}
+
+void setPh(double value)
+{
+  phOverride.enabled = true;
+  phOverride.value = constrain(value, 0.0, 14.0);
+  simPh = phOverride.value;
+  logOverride("pH", simPh);
+}
+
+void setOrp(double value)
+{
+  orpOverride.enabled = true;
+  orpOverride.value = constrain(value, -1000.0, 1500.0);
+  simOrp = orpOverride.value;
+  logOverride("ORP", simOrp);
+}
+
+void setPsi(double value)
+{
+  psiOverride.enabled = true;
+  psiOverride.value = constrain(value, 0.0, 10.0);
+  simPsi = psiOverride.value;
+  logOverride("PSI", simPsi);
+}
+
+void setFlow(bool value)
+{
+  flowOverride.enabled = true;
+  flowOverride.value = value;
+  Debug.print(DBG_INFO, "[SIM] Flow forced to %s", value ? "ON" : "OFF");
+}
+
+void reset()
+{
+  waterTempOverride.enabled = false;
+  airTempOverride.enabled = false;
+  phOverride.enabled = false;
+  orpOverride.enabled = false;
+  psiOverride.enabled = false;
+  flowOverride.enabled = false;
+
+  simWaterTemp = kDefaultWaterTemp;
+  simAirTemp = kDefaultAirTemp;
+  simPh = kDefaultPh;
+  simOrp = kDefaultOrp;
+  simPsi = kDefaultPsi;
+  lastUpdateMs = 0;
+
+  Debug.print(DBG_INFO, "[SIM] Manual overrides cleared");
+}
 }

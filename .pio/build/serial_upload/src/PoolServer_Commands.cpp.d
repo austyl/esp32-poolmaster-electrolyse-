@@ -253,4 +253,5 @@
  lib/Pump-master/src/Pump.h lib/Pump-master/src/Relay.h \
  lib/Pump-master/src/Pin.h lib/Pump-master/src/Relay.h \
  lib/Pump-master/src/PIN.h lib/Pump-master/src/InputSensor.h \
- lib/Pump-master/src/DeviceManager.h include/ConfigManager.h
+ lib/Pump-master/src/DeviceManager.h include/ConfigManager.h \
+ include/InputSimulation.h

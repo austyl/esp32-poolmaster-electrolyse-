@@ -81,6 +81,13 @@ void p_WifiConfig(StaticJsonDocument<250>  &_jsonsdoc);
 void p_MQTTConfig(StaticJsonDocument<250>  &_jsonsdoc);
 void p_SMTPConfig(StaticJsonDocument<250>  &_jsonsdoc);
 void p_PINConfig(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimPh(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimOrp(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimWaterTemp(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimAirTemp(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimPsi(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimFlow(StaticJsonDocument<250>  &_jsonsdoc);
+void p_SimReset(StaticJsonDocument<250>  &_jsonsdoc);
 
 
 #endif

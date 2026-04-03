@@ -1,5 +1,6 @@
 // File to store all commands
 #include "PoolServer_Commands.h"
+#include "InputSimulation.h"
 
 // Map key -> handler function
 const std::map<std::string, std::function<void(StaticJsonDocument<250> &_jsonsdoc)>> server_handlers = {
@@ -65,7 +66,14 @@ const std::map<std::string, std::function<void(StaticJsonDocument<250> &_jsonsdo
     {"WifiConfig",      p_WifiConfig     },
     {"MQTTConfig",      p_MQTTConfig     },
     {"SMTPConfig",      p_SMTPConfig     },
-    {"PINConfig",       p_PINConfig      }
+    {"PINConfig",       p_PINConfig      },
+    {"SimPh",           p_SimPh          },
+    {"SimOrp",          p_SimOrp         },
+    {"SimWaterTemp",    p_SimWaterTemp   },
+    {"SimAirTemp",      p_SimAirTemp     },
+    {"SimPsi",          p_SimPsi         },
+    {"SimFlow",         p_SimFlow        },
+    {"SimReset",        p_SimReset       }
 };
 
 /* All JSON commands functions definition */
@@ -615,5 +623,35 @@ void p_PINConfig(StaticJsonDocument<250>  &_jsonsdoc) {
     PoolDeviceManager.InitDevicesInterlock(temp_index);
     tmp_device->Begin();
     PoolDeviceManager.SavePreferences(temp_index);
+}
+
+void p_SimPh(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setPh(_jsonsdoc[F("SimPh")].as<double>());
+}
+
+void p_SimOrp(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setOrp(_jsonsdoc[F("SimOrp")].as<double>());
+}
+
+void p_SimWaterTemp(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setWaterTemp(_jsonsdoc[F("SimWaterTemp")].as<double>());
+}
+
+void p_SimAirTemp(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setAirTemp(_jsonsdoc[F("SimAirTemp")].as<double>());
+}
+
+void p_SimPsi(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setPsi(_jsonsdoc[F("SimPsi")].as<double>());
+}
+
+void p_SimFlow(StaticJsonDocument<250>  &_jsonsdoc) {
+    InputSimulation::setFlow((bool)_jsonsdoc[F("SimFlow")]);
+}
+
+void p_SimReset(StaticJsonDocument<250>  &_jsonsdoc) {
+    if ((bool)_jsonsdoc[F("SimReset")]) {
+        InputSimulation::reset();
+    }
 }
 

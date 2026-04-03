@@ -330,6 +330,13 @@ Below are the Payloads/commands to publish on the "PoolTopicAPI" topic in Json f
 |{"Clear":1} | reset the pH and Orp pumps overtime error flags in order to let the regulation loops continue. "Mode" also needs to be switched back to Auto (1) after an error flag was raised
 |{"DelayPID":30} | Delay (in mins) after FiltT0 before the PID regulation loops will start. This is to let the Orp and pH readings stabilize first. 30mins in this example. Should not be > 59mins
 |{"TempExt":4.2} | Provide the system with the external temperature. Should be updated regularly and will be used to start filtration when temperature is less than 2°C. 4.2deg in this example
+|{"SimPh":7.10} | bench mode only: force the simulated pH reading to 7.10 until reset
+|{"SimOrp":680} | bench mode only: force the simulated ORP reading to 680mV until reset
+|{"SimWaterTemp":26.5} | bench mode only: force the simulated water temperature to 26.5°C until reset
+|{"SimAirTemp":18.0} | bench mode only: force the simulated air temperature to 18.0°C until reset
+|{"SimPsi":0.80} | bench mode only: force the simulated pressure reading to 0.80bar until reset
+|{"SimFlow":1} or {"SimFlow":0} | bench mode only: force the simulated flow state to present (1) or absent (0)
+|{"SimReset":1} | bench mode only: clear all manual simulated inputs and restore the automatic simulation
 |{"PSIHigh":1.0} | set the water high-pressure threshold (1.0bar in this example). When water pressure is over that threshold, an error flag is set
 |{"pHTank":[20,100]} | call this function when the Acid tank is replaced or refilled. First parameter is the tank volume in Liters, second parameter is its percentage fill (100% when full)
 |{"ChlTank":[20,100]} | call this function when the Chlorine tank is replaced or refilled. First parameter is the tank volume in Liters, second parameter is its percentage fill (100% when full)
