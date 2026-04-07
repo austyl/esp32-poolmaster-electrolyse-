@@ -40,6 +40,7 @@ public:
     ConfigManager(const char* ns = "config") {
         strncpy(namespaceName, ns, sizeof(namespaceName));
         namespaceName[sizeof(namespaceName) - 1] = '\0';
+        memset(dirtyIds, 0, sizeof(dirtyIds));
     }
 
     void SetNamespace(const char* ns) {
@@ -119,6 +120,41 @@ public:
         prefs.begin(namespaceName, false);
         prefs.clear();
         prefs.end();
+        memset(dirtyIds, 0, sizeof(dirtyIds));
+        batchActive = false;
+    }
+
+    void beginBatch() {
+        batchActive = true;
+        memset(dirtyIds, 0, sizeof(dirtyIds));
+    }
+
+    bool commitBatch() {
+        if (!batchActive) {
+            return false;
+        }
+
+        Preferences prefs;
+        prefs.begin(namespaceName, false);
+
+        bool wrote = false;
+        for (int i = 0; i < MAX_PARAMS; ++i) {
+            if (!dirtyIds[i] || entries[i].key == nullptr) {
+                continue;
+            }
+            saveToFlash(prefs, i);
+            dirtyIds[i] = false;
+            wrote = true;
+        }
+
+        prefs.end();
+        batchActive = false;
+        return wrote;
+    }
+
+    void cancelBatch() {
+        memset(dirtyIds, 0, sizeof(dirtyIds));
+        batchActive = false;
     }
 
     void printAllParams() {
@@ -158,10 +194,10 @@ public:
 private:
     char namespaceName[32];
     ParamEntry entries[MAX_PARAMS]; // Assuming a maximum of 50 parameters
+    bool batchActive = false;
+    bool dirtyIds[MAX_PARAMS];
 
-    void saveToFlash(int id) {
-        Preferences prefs;
-        prefs.begin(namespaceName, false);
+    void saveToFlash(Preferences& prefs, int id) {
         const char* key = entries[id].key;
 
         switch (entries[id].type) {
@@ -184,8 +220,21 @@ private:
                 prefs.putString(key, entries[id].value.s);
                 break;
         }
+    }
 
+    void saveToFlash(int id) {
+        Preferences prefs;
+        prefs.begin(namespaceName, false);
+        saveToFlash(prefs, id);
         prefs.end();
+    }
+
+    void flushOrMarkDirty(int id) {
+        if (batchActive) {
+            dirtyIds[id] = true;
+        } else {
+            saveToFlash(id);
+        }
     }
 };
 
@@ -218,7 +267,7 @@ template<> inline const char* ConfigManager::get<const char*>(int id) {
 template<> inline bool ConfigManager::put<bool>(int id, const bool& val) {
     if (entries[id].type == TYPE_BOOL && entries[id].value.b != val) {
         entries[id].value.b = val;
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;
@@ -227,7 +276,7 @@ template<> inline bool ConfigManager::put<bool>(int id, const bool& val) {
 template<> inline bool ConfigManager::put<uint8_t>(int id, const uint8_t& val) {
     if (entries[id].type == TYPE_UINT8 && entries[id].value.u8 != val) {
         entries[id].value.u8 = val;
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;
@@ -236,7 +285,7 @@ template<> inline bool ConfigManager::put<uint8_t>(int id, const uint8_t& val) {
 template<> inline bool ConfigManager::put<unsigned long>(int id, const unsigned long& val) {
     if (entries[id].type == TYPE_ULONG && entries[id].value.ul != val) {
         entries[id].value.ul = val;
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;
@@ -245,7 +294,7 @@ template<> inline bool ConfigManager::put<unsigned long>(int id, const unsigned 
 template<> inline bool ConfigManager::put<double>(int id, const double& val) {
     if (entries[id].type == TYPE_DOUBLE && entries[id].value.d != val) {
         entries[id].value.d = val;
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;
@@ -254,7 +303,7 @@ template<> inline bool ConfigManager::put<double>(int id, const double& val) {
 template<> inline bool ConfigManager::put<uint32_t>(int id, const uint32_t& val) {
     if (entries[id].type == TYPE_UINT32 && entries[id].value.u32 != val) {
         entries[id].value.u32 = val;
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;
@@ -264,7 +313,7 @@ template<> inline bool ConfigManager::put<const char*>(int id, const char* const
     if (entries[id].type == TYPE_STRING && strncmp(entries[id].value.s, val, sizeof(entries[id].value.s)) != 0) {
         strncpy(entries[id].value.s, val, sizeof(entries[id].value.s));
         entries[id].value.s[sizeof(entries[id].value.s) - 1] = '\0';
-        saveToFlash(id);
+        flushOrMarkDirty(id);
         return true;
     }
     return false;

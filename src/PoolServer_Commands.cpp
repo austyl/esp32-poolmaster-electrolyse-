@@ -154,8 +154,10 @@ void p_pHCalib(StaticJsonDocument<250>  &_jsonsdoc) {
       Debug.print(DBG_DEBUG,"Calibration completed. Coeffs are: %10.2f, %10.2f",_pHCalibCoeffs0 ,_pHCalibCoeffs1);
     }
 
+    PMConfig.beginBatch();
     PMConfig.put<double>(PHCALIBCOEFFS0, _pHCalibCoeffs0);
     PMConfig.put<double>(PHCALIBCOEFFS1, _pHCalibCoeffs1);
+    PMConfig.commitBatch();
 
     //Store the new coefficients in eeprom
     PublishSettings();
@@ -206,8 +208,10 @@ void p_OrpCalib(StaticJsonDocument<250>  &_jsonsdoc) {
       Debug.print(DBG_DEBUG,"Calibration completed. Coeffs are: %10.2f, %10.2f",_OrpCalibCoeffs0,_OrpCalibCoeffs1);
     }
 
+    PMConfig.beginBatch();
     PMConfig.put<double>(ORPCALIBCOEFFS0, _OrpCalibCoeffs0);
     PMConfig.put<double>(ORPCALIBCOEFFS1, _OrpCalibCoeffs1);
+    PMConfig.commitBatch();
 
     PublishSettings();
 }
@@ -243,8 +247,10 @@ void p_PSICalib(StaticJsonDocument<250>  &_jsonsdoc) {
       //Compute linear regression coefficients
       simpLinReg(xCalibPoints, yCalibPoints, _PSICalibCoeffs0, _PSICalibCoeffs1, NbPoints / 2);
 
+    PMConfig.beginBatch();
     PMConfig.put<double>(PSICALIBCOEFFS0, _PSICalibCoeffs0);
     PMConfig.put<double>(PSICALIBCOEFFS1, _PSICalibCoeffs1);
+    PMConfig.commitBatch();
 
       PublishSettings();
       Debug.print(DBG_DEBUG,"Calibration completed. Coeffs are: %10.2f, %10.2f",_PSICalibCoeffs0,_PSICalibCoeffs1);
@@ -264,14 +270,18 @@ void p_Mode(StaticJsonDocument<250>  &_jsonsdoc) {
 void p_Electrolyse(StaticJsonDocument<250>  &_jsonsdoc) {
     bool enable = ((int)_jsonsdoc[F("Electrolyse")] == 1);
     // Compatibility path: direct electrolysis requests now enable/disable the dedicated controller.
+    PMConfig.beginBatch();
     PMConfig.put<bool>(ELECTROLYSEMODE, enable);
     PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_ElectrolyseMode(StaticJsonDocument<250>  &_jsonsdoc) {
     bool enable = (bool)_jsonsdoc[F("ElectrolyseMode")];
+    PMConfig.beginBatch();
     PMConfig.put<bool>(ELECTROLYSEMODE, enable);
     PMConfig.put<bool>(ELECTROLYSIS_ENABLED, enable);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_Winter(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -339,16 +349,20 @@ void p_FillMaxUpTime(StaticJsonDocument<250>  &_jsonsdoc) {
     PublishSettings();
 }
 void p_OrpPIDParams(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<double>(ORP_KP, (double)_jsonsdoc[F("OrpPIDParams")][0]);
     PMConfig.put<double>(ORP_KI, (double)_jsonsdoc[F("OrpPIDParams")][1]);
     PMConfig.put<double>(ORP_KD, (double)_jsonsdoc[F("OrpPIDParams")][2]);
+    PMConfig.commitBatch();
     OrpPID.SetTunings(PMConfig.get<double>(ORP_KP), PMConfig.get<double>(ORP_KI), PMConfig.get<double>(ORP_KD));
     PublishSettings();
 }
 void p_PhPIDParams(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<double>(PH_KP, (double)_jsonsdoc[F("PhPIDParams")][0]);
     PMConfig.put<double>(PH_KI, (double)_jsonsdoc[F("PhPIDParams")][1]);
     PMConfig.put<double>(PH_KD, (double)_jsonsdoc[F("PhPIDParams")][2]);
+    PMConfig.commitBatch();
     PhPID.SetTunings(PMConfig.get<double>(PH_KP), PMConfig.get<double>(PH_KI), PMConfig.get<double>(PH_KD));
     PublishSettings();
 }
@@ -402,18 +416,24 @@ void p_ChlPumpFR(StaticJsonDocument<250>  &_jsonsdoc) {
     PublishSettings();
 }
 void p_RstpHCal(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<double>(PHCALIBCOEFFS0, (double)-2.50133333);
     PMConfig.put<double>(PHCALIBCOEFFS1, (double)6.9);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_RstOrpCal(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<double>(ORPCALIBCOEFFS0, (double)431.03);
     PMConfig.put<double>(ORPCALIBCOEFFS1, (double)0.0);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_RstPSICal(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<double>(PSICALIBCOEFFS0, (double)0.377923399);
     PMConfig.put<double>(PSICALIBCOEFFS1, (double)-0.17634473);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_Settings(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -552,8 +572,10 @@ void p_Clear(StaticJsonDocument<250>  &_jsonsdoc) {
 //"ElectroConfig" command which is called when the Electrolyser is configured
 //First parameter is minimum temperature to use the Electrolyser, second is the delay after pump start
 void p_ElectroConfig(StaticJsonDocument<250>  &_jsonsdoc) {
+    PMConfig.beginBatch();
     PMConfig.put<uint8_t>(SECUREELECTRO, (uint8_t)_jsonsdoc[F("ElectroConfig")][0]);
     PMConfig.put<uint8_t>(DELAYELECTRO, (uint8_t)_jsonsdoc[F("ElectroConfig")][1]);
+    PMConfig.commitBatch();
     PublishSettings();
 }
 void p_SecureElectro(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -589,6 +611,7 @@ void p_WifiConfig(StaticJsonDocument<250>  &_jsonsdoc) {
 void p_MQTTConfig(StaticJsonDocument<250>  &_jsonsdoc) {
     IPAddress _mqtt_ip;
     _mqtt_ip.fromString((const char*)_jsonsdoc[F("MQTTConfig")][0]);
+    PMConfig.beginBatch();
     PMConfig.put<uint32_t>(MQTT_IP, _mqtt_ip); // Save the IP address in PMConfig
 
     PMConfig.put<uint32_t>(MQTT_PORT, (uint32_t)_jsonsdoc[F("MQTTConfig")][1]);
@@ -596,6 +619,7 @@ void p_MQTTConfig(StaticJsonDocument<250>  &_jsonsdoc) {
     PMConfig.put<const char*>(MQTT_PASS, (const char*)_jsonsdoc[F("MQTTConfig")][3]);
     PMConfig.put<const char*>(MQTT_ID, (const char*)_jsonsdoc[F("MQTTConfig")][4]);
     PMConfig.put<const char*>(MQTT_TOPIC, (const char*)_jsonsdoc[F("MQTTConfig")][5]);
+    PMConfig.commitBatch();
 
     // Connect to new MQTT Credentials
     mqttDisconnect();
@@ -605,12 +629,14 @@ void p_MQTTConfig(StaticJsonDocument<250>  &_jsonsdoc) {
 void p_SMTPConfig(StaticJsonDocument<250>  &_jsonsdoc) {
     // Format of message is {"SMTPConfig":[SMTP_SERVER, SMTP_PORT, SMTP_LOGIN, SMTP_PASS, SMTP_SENDER, SMTP_RECIPIENT]}
     // Save SMTP configuration
+    PMConfig.beginBatch();
     PMConfig.put<const char*>(SMTP_SERVER, (const char*)_jsonsdoc[F("SMTPConfig")][0]);
     PMConfig.put<uint32_t>(SMTP_PORT, (uint32_t)_jsonsdoc[F("SMTPConfig")][1]);
     PMConfig.put<const char*>(SMTP_LOGIN, (const char*)_jsonsdoc[F("SMTPConfig")][2]);
     PMConfig.put<const char*>(SMTP_PASS, (const char*)_jsonsdoc[F("SMTPConfig")][3]);
     PMConfig.put<const char*>(SMTP_SENDER, (const char*)_jsonsdoc[F("SMTPConfig")][4]);
     PMConfig.put<const char*>(SMTP_RECIPIENT, (const char*)_jsonsdoc[F("SMTPConfig")][5]);
+    PMConfig.commitBatch();
 
 }
 void p_PINConfig(StaticJsonDocument<250>  &_jsonsdoc) {
