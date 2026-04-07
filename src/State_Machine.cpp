@@ -19,6 +19,7 @@ bool FillingPump_StopCondition()
 }
 
 bool FiltrationPump_StartCondition() { 
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   // If no PSI error, 
   // Either
   // - Auto mode AND filtration time is between start and stop time
@@ -26,14 +27,15 @@ bool FiltrationPump_StartCondition() {
   if (PSIError) return false; // If PSI error, should never start
 
   return (((PMConfig.get<bool>(AUTOMODE) && hour() >= PMConfig.get<uint8_t>(FILTRATIONSTART) && hour() < PMConfig.get<uint8_t>(FILTRATIONSTOP)) ||
-          (PMConfig.get<bool>(WINTERMODE) && PMData.AirTemp < -2.0)));
+          (PMConfig.get<bool>(WINTERMODE) && runtimeSnapshot.AirTemp < -2.0)));
 }
 
 
 void FiltrationPump_LoopActions() {
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   // Check over and under pressure alarms
-  if ((((millis() - FiltrationPump.StartTime) > 180000) && (PMData.PSIValue < PMConfig.get<double>(PSI_MEDTHRESHOLD))) ||
-      (PMData.PSIValue > PMConfig.get<double>(PSI_HIGHTHRESHOLD)))
+  if ((((millis() - FiltrationPump.StartTime) > 180000) && (runtimeSnapshot.PSIValue < PMConfig.get<double>(PSI_MEDTHRESHOLD))) ||
+      (runtimeSnapshot.PSIValue > PMConfig.get<double>(PSI_HIGHTHRESHOLD)))
   {
     PSIError = true;
     Debug.print(DBG_INFO,"[LOGIC] PSI Changed to Error");
@@ -64,11 +66,12 @@ void FiltrationPump_LoopActions() {
 }
 
 bool FiltrationPump_StopCondition() { 
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   // If temp <= +2°C, never stop
   // If PSI error, should stop immediately
   // If Auto mode AND filtration time is outside start and stop time
 
-  if(PMData.AirTemp <= 2.0) return false;
+  if(runtimeSnapshot.AirTemp <= 2.0) return false;
 
   if (PSIError) return true;
 
@@ -90,6 +93,7 @@ bool RobotPump_StopCondition(void) {
 }
 
 bool SWGPump_StartCondition() {
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   // SWG Pump should start if:
   // - Electrolyse mode is ON AND
   // - if ElectroRunMode is ON
@@ -102,10 +106,10 @@ bool SWGPump_StartCondition() {
   //      If ElectroRunMode is OFF, it will be switched on automatically with filtration and off by the Filtration Pump interlock
   if (PMConfig.get<bool>(ELECTROLYSEMODE)) {
     if (PMConfig.get<bool>(ELECTRORUNMODE)) { //SWG Run Mode is ADJUSTED
-      return (PMData.OrpValue <= PMData.Orp_SetPoint * 0.9 && PMData.WaterTemp >= PMConfig.get<uint8_t>(SECUREELECTRO) &&
+      return (runtimeSnapshot.OrpValue <= runtimeSnapshot.Orp_SetPoint * 0.9 && runtimeSnapshot.WaterTemp >= PMConfig.get<uint8_t>(SECUREELECTRO) &&
               (millis() - FiltrationPump.StartTime) / 1000 / 60 >= PMConfig.get<uint8_t>(DELAYELECTRO));
     } else {                      //SWG Run Mode is FIXED
-      return (PMData.WaterTemp >= PMConfig.get<uint8_t>(SECUREELECTRO) &&
+      return (runtimeSnapshot.WaterTemp >= PMConfig.get<uint8_t>(SECUREELECTRO) &&
               (millis() - FiltrationPump.StartTime) / 1000 / 60 >= PMConfig.get<uint8_t>(DELAYELECTRO));
     }
   }
@@ -113,13 +117,14 @@ bool SWGPump_StartCondition() {
 }
 
 bool SWGPump_StopCondition() {
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   // SWG Pump should stop if:
   // - Electrolyse mode is ON AND
   // - if ElectroRunMode is ON
   //    - ORP value is above the set point
   if (PMConfig.get<bool>(ELECTROLYSEMODE)) {
     if (PMConfig.get<bool>(ELECTRORUNMODE)) { //SWG Run Mode is ADJUSTED
-      return (PMData.OrpValue > PMData.Orp_SetPoint);
+      return (runtimeSnapshot.OrpValue > runtimeSnapshot.Orp_SetPoint);
     } else {                      //SWG Run Mode is FIXED
       // SWG Pump will be stopped by the Filtration Pump interlock
       return false; // Nothing to do, will be stopped automatically

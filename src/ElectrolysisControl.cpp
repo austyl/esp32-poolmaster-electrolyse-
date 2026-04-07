@@ -54,11 +54,11 @@ void setBridgeOutputs(bool enable, bool forward)
   }
 }
 
-void enterState(ElectrolysisState nextState, unsigned long now)
+void enterState(ElectrolysisRuntimeData& electrolysisState, ElectrolysisState nextState, unsigned long now)
 {
-  if (ElectrolysisData.state != nextState) {
-    ElectrolysisData.state = nextState;
-    ElectrolysisData.stateSinceMs = now;
+  if (electrolysisState.state != nextState) {
+    electrolysisState.state = nextState;
+    electrolysisState.stateSinceMs = now;
   }
 }
 }
@@ -73,6 +73,7 @@ bool ElectrolysisFlowOk(void)
 
 bool ElectrolysisPressureOk(void)
 {
+  const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
   if (!PMConfig.get<bool>(REQUIRE_PRESSURE_OK)) {
     return true;
   }
@@ -81,12 +82,15 @@ bool ElectrolysisPressureOk(void)
     return false;
   }
 
-  return PMData.PSIValue >= PMConfig.get<double>(PSI_MEDTHRESHOLD) &&
-         PMData.PSIValue <= PMConfig.get<double>(PSI_HIGHTHRESHOLD);
+  return runtimeSnapshot.PSIValue >= PMConfig.get<double>(PSI_MEDTHRESHOLD) &&
+         runtimeSnapshot.PSIValue <= PMConfig.get<double>(PSI_HIGHTHRESHOLD);
 }
 
 void ElectrolysisControl(void *pvParameters)
 {
+  RunTimeData runtimeSnapshot;
+  ElectrolysisRuntimeData electrolysisSnapshot = GetElectrolysisDataSnapshot();
+
   while (!startTasks) ;
   vTaskDelay(DT12);
 
@@ -95,8 +99,9 @@ void ElectrolysisControl(void *pvParameters)
   unsigned long lastMillis = millis();
   bool nextForward = true;
 
-  ElectrolysisData.bridgePresent = isConfiguredPin(IBT2_FWD_PIN) && isConfiguredPin(IBT2_REV_PIN);
-  ElectrolysisData.flowSensorPresent = isConfiguredPin(FLOW_SWITCH_PIN);
+  electrolysisSnapshot.bridgePresent = isConfiguredPin(IBT2_FWD_PIN) && isConfiguredPin(IBT2_REV_PIN);
+  electrolysisSnapshot.flowSensorPresent = isConfiguredPin(FLOW_SWITCH_PIN);
+  SetElectrolysisDataSnapshot(electrolysisSnapshot);
 
   for (;;)
   {
@@ -109,110 +114,119 @@ void ElectrolysisControl(void *pvParameters)
     const unsigned long reverseIntervalMs = PMConfig.get<unsigned long>(ELECTROLYSIS_REVERSE_INTERVAL_MIN) * 60UL * 1000UL;
     const unsigned long windowMs = max(1UL, PMConfig.get<unsigned long>(ELECTROLYSIS_WINDOW_S) * 1000UL);
 
-    ElectrolysisData.enabled = electrolysisEnabled();
-    ElectrolysisData.flowOk = ElectrolysisFlowOk();
-    ElectrolysisData.pressureOk = ElectrolysisPressureOk();
-    ElectrolysisData.requestPct = PMData.OrpDemandPct;
+    runtimeSnapshot = GetRunTimeDataSnapshot();
+    electrolysisSnapshot = GetElectrolysisDataSnapshot();
+
+    electrolysisSnapshot.enabled = electrolysisEnabled();
+    electrolysisSnapshot.flowOk = ElectrolysisFlowOk();
+    electrolysisSnapshot.pressureOk = ElectrolysisPressureOk();
+    electrolysisSnapshot.requestPct = runtimeSnapshot.OrpDemandPct;
 
     const bool filtrationRunning = FiltrationPump.IsRunning();
-    const bool tempOk = PMData.WaterTemp >= PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C);
-    const bool requestActive = ElectrolysisData.requestPct > 0;
+    const bool tempOk = runtimeSnapshot.WaterTemp >= PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C);
+    const bool requestActive = electrolysisSnapshot.requestPct > 0;
     const bool startDelayElapsed = (now - FiltrationPump.StartTime) >= startDelayMs;
-    const bool hardFault = filtrationRunning && !ElectrolysisData.pressureOk;
+    const bool hardFault = filtrationRunning && !electrolysisSnapshot.pressureOk;
 
-    if (!filtrationRunning || !ElectrolysisData.enabled || !tempOk || !requestActive) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
-      ElectrolysisData.faultLatched = false;
-      ElectrolysisData.polarityRunMs = 0;
-      enterState(ELECTROLYSIS_OFF, now);
+    if (!filtrationRunning || !electrolysisSnapshot.enabled || !tempOk || !requestActive) {
+      setBridgeOutputs(false, electrolysisSnapshot.polarityForward);
+      electrolysisSnapshot.outputActive = false;
+      electrolysisSnapshot.appliedPct = 0;
+      electrolysisSnapshot.faultLatched = false;
+      electrolysisSnapshot.polarityRunMs = 0;
+      enterState(electrolysisSnapshot, ELECTROLYSIS_OFF, now);
+      SetElectrolysisDataSnapshot(electrolysisSnapshot);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
 
     if (hardFault || SWGPump.UpTimeError) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
-      ElectrolysisData.faultLatched = true;
-      enterState(ELECTROLYSIS_FAULT, now);
+      setBridgeOutputs(false, electrolysisSnapshot.polarityForward);
+      electrolysisSnapshot.outputActive = false;
+      electrolysisSnapshot.appliedPct = 0;
+      electrolysisSnapshot.faultLatched = true;
+      enterState(electrolysisSnapshot, ELECTROLYSIS_FAULT, now);
+      SetElectrolysisDataSnapshot(electrolysisSnapshot);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
 
     if (!startDelayElapsed) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
-      enterState(ELECTROLYSIS_WAIT_FLOW, now);
+      setBridgeOutputs(false, electrolysisSnapshot.polarityForward);
+      electrolysisSnapshot.outputActive = false;
+      electrolysisSnapshot.appliedPct = 0;
+      enterState(electrolysisSnapshot, ELECTROLYSIS_WAIT_FLOW, now);
+      SetElectrolysisDataSnapshot(electrolysisSnapshot);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
 
-    if (!ElectrolysisData.flowOk) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
-      enterState(ELECTROLYSIS_OFF, now);
+    if (!electrolysisSnapshot.flowOk) {
+      setBridgeOutputs(false, electrolysisSnapshot.polarityForward);
+      electrolysisSnapshot.outputActive = false;
+      electrolysisSnapshot.appliedPct = 0;
+      enterState(electrolysisSnapshot, ELECTROLYSIS_OFF, now);
+      SetElectrolysisDataSnapshot(electrolysisSnapshot);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
 
-    if ((now - ElectrolysisData.windowStartMs) >= windowMs) {
-      ElectrolysisData.windowStartMs = now;
+    if ((now - electrolysisSnapshot.windowStartMs) >= windowMs) {
+      electrolysisSnapshot.windowStartMs = now;
     }
 
-    if (ElectrolysisData.state == ELECTROLYSIS_FAULT) {
-      ElectrolysisData.faultLatched = false;
-      enterState(ELECTROLYSIS_WAIT_FLOW, now);
+    if (electrolysisSnapshot.state == ELECTROLYSIS_FAULT) {
+      electrolysisSnapshot.faultLatched = false;
+      enterState(electrolysisSnapshot, ELECTROLYSIS_WAIT_FLOW, now);
     }
 
-    if (ElectrolysisData.state == ELECTROLYSIS_OFF || ElectrolysisData.state == ELECTROLYSIS_WAIT_FLOW) {
-      ElectrolysisData.polarityForward = nextForward;
-      ElectrolysisData.polarityRunMs = 0;
-      enterState(ElectrolysisData.polarityForward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV, now);
+    if (electrolysisSnapshot.state == ELECTROLYSIS_OFF || electrolysisSnapshot.state == ELECTROLYSIS_WAIT_FLOW) {
+      electrolysisSnapshot.polarityForward = nextForward;
+      electrolysisSnapshot.polarityRunMs = 0;
+      enterState(electrolysisSnapshot, electrolysisSnapshot.polarityForward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV, now);
     }
 
-    if (ElectrolysisData.state == ELECTROLYSIS_DEADTIME) {
-      setBridgeOutputs(false, ElectrolysisData.polarityForward);
-      ElectrolysisData.outputActive = false;
-      ElectrolysisData.appliedPct = 0;
+    if (electrolysisSnapshot.state == ELECTROLYSIS_DEADTIME) {
+      setBridgeOutputs(false, electrolysisSnapshot.polarityForward);
+      electrolysisSnapshot.outputActive = false;
+      electrolysisSnapshot.appliedPct = 0;
 
-      if ((now - ElectrolysisData.stateSinceMs) >= deadtimeMs) {
-        ElectrolysisData.polarityForward = nextForward;
-        ElectrolysisData.polarityRunMs = 0;
-        enterState(ElectrolysisData.polarityForward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV, now);
+      if ((now - electrolysisSnapshot.stateSinceMs) >= deadtimeMs) {
+        electrolysisSnapshot.polarityForward = nextForward;
+        electrolysisSnapshot.polarityRunMs = 0;
+        enterState(electrolysisSnapshot, electrolysisSnapshot.polarityForward ? ELECTROLYSIS_RUN_FWD : ELECTROLYSIS_RUN_REV, now);
       }
 
+      SetElectrolysisDataSnapshot(electrolysisSnapshot);
       vTaskDelayUntil(&ticktime, period);
       continue;
     }
 
-    if (ElectrolysisData.state == ELECTROLYSIS_RUN_FWD || ElectrolysisData.state == ELECTROLYSIS_RUN_REV) {
-      const unsigned long onTimeMs = (windowMs * (unsigned long)ElectrolysisData.requestPct) / 100UL;
-      const bool shouldBeOn = (now - ElectrolysisData.windowStartMs) < onTimeMs;
+    if (electrolysisSnapshot.state == ELECTROLYSIS_RUN_FWD || electrolysisSnapshot.state == ELECTROLYSIS_RUN_REV) {
+      const unsigned long onTimeMs = (windowMs * (unsigned long)electrolysisSnapshot.requestPct) / 100UL;
+      const bool shouldBeOn = (now - electrolysisSnapshot.windowStartMs) < onTimeMs;
 
       if (shouldBeOn) {
-        setBridgeOutputs(true, ElectrolysisData.state == ELECTROLYSIS_RUN_FWD);
-        ElectrolysisData.outputActive = true;
-        ElectrolysisData.appliedPct = ElectrolysisData.requestPct;
-        ElectrolysisData.polarityRunMs += elapsedMs;
+        setBridgeOutputs(true, electrolysisSnapshot.state == ELECTROLYSIS_RUN_FWD);
+        electrolysisSnapshot.outputActive = true;
+        electrolysisSnapshot.appliedPct = electrolysisSnapshot.requestPct;
+        electrolysisSnapshot.polarityRunMs += elapsedMs;
       } else {
-        setBridgeOutputs(false, ElectrolysisData.state == ELECTROLYSIS_RUN_FWD);
-        ElectrolysisData.outputActive = false;
-        ElectrolysisData.appliedPct = 0;
+        setBridgeOutputs(false, electrolysisSnapshot.state == ELECTROLYSIS_RUN_FWD);
+        electrolysisSnapshot.outputActive = false;
+        electrolysisSnapshot.appliedPct = 0;
       }
 
-      if (reverseIntervalMs > 0 && ElectrolysisData.polarityRunMs >= reverseIntervalMs) {
-        setBridgeOutputs(false, ElectrolysisData.state == ELECTROLYSIS_RUN_FWD);
-        ElectrolysisData.outputActive = false;
-        ElectrolysisData.appliedPct = 0;
-        nextForward = (ElectrolysisData.state == ELECTROLYSIS_RUN_FWD) ? false : true;
-        enterState(ELECTROLYSIS_DEADTIME, now);
+      if (reverseIntervalMs > 0 && electrolysisSnapshot.polarityRunMs >= reverseIntervalMs) {
+        setBridgeOutputs(false, electrolysisSnapshot.state == ELECTROLYSIS_RUN_FWD);
+        electrolysisSnapshot.outputActive = false;
+        electrolysisSnapshot.appliedPct = 0;
+        nextForward = (electrolysisSnapshot.state == ELECTROLYSIS_RUN_FWD) ? false : true;
+        enterState(electrolysisSnapshot, ELECTROLYSIS_DEADTIME, now);
       }
     }
 
+    SetElectrolysisDataSnapshot(electrolysisSnapshot);
     vTaskDelayUntil(&ticktime, period);
   }
 }

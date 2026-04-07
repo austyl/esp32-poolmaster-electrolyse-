@@ -11,6 +11,7 @@ CircularBuffer<int,NUMBER_OF_HISTORY_SAMPLES> WTemp_Samples;
 void HistoryStats(void *pvParameters)
 {
   static UBaseType_t hwm=0;     // free stack size
+  RunTimeData runtimeSnapshot;
 
   while(!startTasks);
   vTaskDelay(DT11);                                // Scheduling offset 
@@ -36,9 +37,10 @@ void HistoryStats(void *pvParameters)
     #endif    
 
     // Store History Samples
-    pH_Samples.push((int)(PMData.PhValue*100));
-    Orp_Samples.push((int)(PMData.OrpValue));
-    WTemp_Samples.push((int)(PMData.WaterTemp*10));
+    runtimeSnapshot = GetRunTimeDataSnapshot();
+    pH_Samples.push((int)(runtimeSnapshot.PhValue * 100));
+    Orp_Samples.push((int)(runtimeSnapshot.OrpValue));
+    WTemp_Samples.push((int)(runtimeSnapshot.WaterTemp * 10));
 
     // Check NTP Connection and reconnect if needed
 
@@ -55,4 +57,3 @@ void HistoryStats(void *pvParameters)
     vTaskDelayUntil(&ticktime,period);
   } 
 }
-

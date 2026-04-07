@@ -1,6 +1,7 @@
 #pragma once
 #define ARDUINOJSON_USE_DOUBLE 1  // Required to force ArduinoJSON to treat float as double
 
+#include <Arduino.h>
 #include "Arduino_DebugUtils.h"   // Debug.print
 #include <time.h>                 // Struct and function declarations for dealing with time
 #include "TimeLib.h"              // Low level time and date functions
@@ -151,7 +152,11 @@ extern void syncRTC2ESP(void);
 
 //Queue object to store incoming JSON commands (up to 10)
 #define QUEUE_ITEMS_NBR 10
-#define QUEUE_ITEM_SIZE 200
+#define MQTT_COMMAND_MAX_LEN 200
+struct MQTTCommandMessage {
+    size_t length;
+    char data[MQTT_COMMAND_MAX_LEN + 1];
+};
 extern QueueHandle_t queueIn;
 
 //The four pumps of the system (instanciate the Pump class)
@@ -201,4 +206,9 @@ extern bool cleaning_done;      					   // Robot clean-up done
 extern bool ElectrolysisFlowOk(void);
 extern bool ElectrolysisPressureOk(void);
 extern void ElectrolysisControl(void*);
-
+extern void RuntimeDataLock(void);
+extern void RuntimeDataUnlock(void);
+extern RunTimeData GetRunTimeDataSnapshot(void);
+extern ElectrolysisRuntimeData GetElectrolysisDataSnapshot(void);
+extern void GetRuntimeDataSnapshot(RunTimeData&, ElectrolysisRuntimeData&);
+extern void SetElectrolysisDataSnapshot(const ElectrolysisRuntimeData&);

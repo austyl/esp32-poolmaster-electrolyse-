@@ -14,6 +14,7 @@
 uint8_t NexPages_Loop(EasyNex& _myNex)
 {
     uint8_t _ret = 1;    // Function returns a value which divides the sleep time to speed up screen refresh when needed
+    const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
     // Do not update switch status during 1s after a change of switch to allow the system to reflect it in real life
     // avoids switches to flicker on/off on the screen
     uint8_t _lang_locale = PMConfig.get<uint8_t>(LANG_LOCALE);
@@ -33,17 +34,17 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     myNex.writeStr(F(GLOBAL".vaDate.txt"),temp);
 
     // PSI difference with Threshold
-    if (PMData.PSIValue <= PMConfig.get<double>(PSI_MEDTHRESHOLD)) {
+    if (runtimeSnapshot.PSIValue <= PMConfig.get<double>(PSI_MEDTHRESHOLD)) {
         myNex.writeNum(F("pageMenu800.vaPSINiddle.val"), 0);
-    } else if (PMData.PSIValue > PMConfig.get<double>(PSI_HIGHTHRESHOLD)){
+    } else if (runtimeSnapshot.PSIValue > PMConfig.get<double>(PSI_HIGHTHRESHOLD)){
         myNex.writeNum(F("pageMenu800.vaPSINiddle.val"), 4);
     } else {
         myNex.writeNum(F("pageMenu800.vaPSINiddle.val"), 2);
     }
 
     // pH & Orp niddle position
-    double _pHSetPoint = PMData.Ph_SetPoint;
-    double _pHValue = PMData.PhValue;
+    double _pHSetPoint = runtimeSnapshot.Ph_SetPoint;
+    double _pHValue = runtimeSnapshot.PhValue;
     if(abs(_pHValue-_pHSetPoint) <= 0.1) 
         myNex.writeNum(F("pageMenu800.vaPHNiddle.val"),0);
     if((_pHValue-_pHSetPoint) > 0.1 && (_pHValue-_pHSetPoint) <= 0.3)  
@@ -55,8 +56,8 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     if((_pHValue-_pHSetPoint) < -0.3)  
         myNex.writeNum(F("pageMenu800.vaPHNiddle.val"),-2);
 
-    double _orpSetPoint = PMData.Orp_SetPoint;
-    double _orpValue = PMData.OrpValue;
+    double _orpSetPoint = runtimeSnapshot.Orp_SetPoint;
+    double _orpValue = runtimeSnapshot.OrpValue;
     if(abs(_orpValue-_orpSetPoint) <= 70.) 
         myNex.writeNum(F("pageMenu800.vaOrpNiddle.val"),0);
     if((_orpValue-_orpSetPoint) > 70. && (_orpValue-_orpSetPoint) <= 200.)  
@@ -75,7 +76,7 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     myNex.writeStr(F(GLOBAL".vaOrp.txt"),temp);
 
     // Water Temperature
-    snprintf_P(temp,sizeof(temp),PSTR("%4.1f°C"),PMData.WaterTemp);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.1f°C"),runtimeSnapshot.WaterTemp);
     if(myNex.currentPageId==ENP_HOME800) {
         myNex.writeStr(F("pageMenu800.tTopRight.txt"),temp);
     } else if(myNex.currentPageId==ENP_H800_OV1) {
@@ -92,13 +93,13 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     myNex.writeStr(F(GLOBAL".vaTime.txt"),temp);
     sprintf(temp, PSTR("%02d/%02d/%02d"), day(), month(), year()-2000);
     myNex.writeStr(F(GLOBAL".vaDate.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),PMData.PhValue);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),runtimeSnapshot.PhValue);
     myNex.writeStr(F(GLOBAL".vapH.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),PMData.OrpValue);
+    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),runtimeSnapshot.OrpValue);
     myNex.writeStr(F(GLOBAL".vaOrp.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PMData.Ph_SetPoint);
+    snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),runtimeSnapshot.Ph_SetPoint);
     myNex.writeStr(F(GLOBAL".vapHSP.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),PMData.Orp_SetPoint);
+    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),runtimeSnapshot.Orp_SetPoint);
     myNex.writeStr(F(GLOBAL".vaOrpSP.txt"),temp);
     snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),PMConfig.get<double>(WATERTEMP_SETPOINT));
     myNex.writeStr(F(GLOBAL".vaWTSP.txt"),temp);
@@ -108,19 +109,19 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     myNex.writeStr(F(GLOBAL".vaPSIMin.txt"),temp);
     snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PMConfig.get<double>(PSI_HIGHTHRESHOLD));
     myNex.writeStr(F(GLOBAL".vaPSIMax.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%4.1f"),PMData.WaterTemp);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.1f"),runtimeSnapshot.WaterTemp);
     myNex.writeStr(F("pageHome.vaWT.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%4.1f"),PMData.AirTemp);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.1f"),runtimeSnapshot.AirTemp);
     myNex.writeStr(F("pageHome.vaAT.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),PMData.PSIValue);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),runtimeSnapshot.PSIValue);
     myNex.writeStr(F("pageHome.vaPSI.txt"),temp);
 
     // Update all gauge values
     long temp_gauge; 
-    double _pHSetPoint = PMData.Ph_SetPoint;
-    double _pHValue = PMData.PhValue;
-    double _orpSetPoint = PMData.Orp_SetPoint;
-    double _orpValue = PMData.OrpValue;
+    double _pHSetPoint = runtimeSnapshot.Ph_SetPoint;
+    double _pHValue = runtimeSnapshot.PhValue;
+    double _orpSetPoint = runtimeSnapshot.Orp_SetPoint;
+    double _orpValue = runtimeSnapshot.OrpValue;
 
     temp_gauge = map(_pHValue, _pHSetPoint - 0.5, _pHSetPoint + 0.5, 0, 154);
     temp_gauge = constrain(temp_gauge, 0, 147);
@@ -128,11 +129,11 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
     temp_gauge = map(_orpValue, _orpSetPoint - 50, _orpSetPoint + 50, 0, 154);
     temp_gauge = constrain(temp_gauge, 0, 147);
     myNex.writeNum(F("pageHome.vaPercArrowORP.val"), temp_gauge);
-    temp_gauge = map(PMData.WaterTemp, PMConfig.get<double>(WATERTEMPLOWTHRESHOLD), PMConfig.get<double>(WATERTEMP_SETPOINT), 37, 110);
+    temp_gauge = map(runtimeSnapshot.WaterTemp, PMConfig.get<double>(WATERTEMPLOWTHRESHOLD), PMConfig.get<double>(WATERTEMP_SETPOINT), 37, 110);
     temp_gauge = constrain(temp_gauge, 0, 147);
     myNex.writeNum(F("pageHome.vaPercArrowT.val"), temp_gauge);
 
-    double _psiValue = PMData.PSIValue;
+    double _psiValue = runtimeSnapshot.PSIValue;
     double _psiMedThreshold = PMConfig.get<double>(PSI_MEDTHRESHOLD);
     if (_psiValue <= _psiMedThreshold) {
         temp_gauge = map(_psiValue, (double)0, _psiMedThreshold, 0, 24);
@@ -209,9 +210,9 @@ uint8_t NexPages_Loop(EasyNex& _myNex)
         myNex.writeStr(PSTR("Calib_Orp.txt"),Helpers::translated_word(FL_(NXT_CALIB_ORPPROBE),_lang_locale));
     }
 
-    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),PMData.PhValue);
+    snprintf_P(temp,sizeof(temp),PSTR("%4.2f"),runtimeSnapshot.PhValue);
     myNex.writeStr(F(GLOBAL".vapH.txt"),temp);
-    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),PMData.OrpValue);
+    snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),runtimeSnapshot.OrpValue);
     myNex.writeStr(F(GLOBAL".vaOrp.txt"),temp);
     } 
 

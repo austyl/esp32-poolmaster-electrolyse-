@@ -21,6 +21,9 @@ static TimerHandle_t wifiReconnectTimer;      // Reconnect timer for WiFi
 static char PoolTopicAPI[100];
 static char PoolTopicStatus[100];
 static char PoolTopicError[100];
+static char mqttCommandBuffer[MQTT_COMMAND_MAX_LEN + 1];
+static size_t mqttCommandLength = 0;
+static bool mqttCommandOverflow = false;
 static const char* TopicAPI       = "API";
 static const char* TopicStatus    = "Status";
 static const char* TopicError     = "Err";
@@ -219,18 +222,45 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   //Pool commands. This check might be redundant since we only subscribed to this topic
   if (strcmp(topic,PoolTopicAPI)==0)
   {
-    char Command[250] = "";
-
-    for (uint8_t i=0 ; i<len ; i++){
-      Command[i] = payload[i];
+    if (index == 0) {
+      mqttCommandLength = 0;
+      mqttCommandOverflow = (total > MQTT_COMMAND_MAX_LEN);
+      mqttCommandBuffer[0] = '\0';
     }
-    if (xQueueSendToBack(queueIn, &Command, 0) == pdPASS)
+
+    if (!mqttCommandOverflow) {
+      const size_t available = MQTT_COMMAND_MAX_LEN - mqttCommandLength;
+      const size_t copyLength = (len <= available) ? len : available;
+
+      memcpy(mqttCommandBuffer + mqttCommandLength, payload, copyLength);
+      mqttCommandLength += copyLength;
+      mqttCommandBuffer[mqttCommandLength] = '\0';
+
+      if (copyLength != len) {
+        mqttCommandOverflow = true;
+      }
+    }
+
+    if ((index + len) < total) {
+      return;
+    }
+
+    if (mqttCommandOverflow) {
+      Debug.print(DBG_WARNING,"MQTT command too long (%u bytes), dropped", (unsigned)total);
+      return;
+    }
+
+    MQTTCommandMessage command = {};
+    command.length = mqttCommandLength;
+    memcpy(command.data, mqttCommandBuffer, mqttCommandLength + 1);
+
+    if (xQueueSendToBack(queueIn, &command, 0) == pdPASS)
     {
-      Debug.print(DBG_INFO,"Command added to queue: %s",Command);
+      Debug.print(DBG_INFO,"Command added to queue: %s",command.data);
     }
     else
     {
-      Debug.print(DBG_ERROR,"Queue full, command: %s not added", Command);
+      Debug.print(DBG_ERROR,"Queue full, command: %s not added", command.data);
     }
     Debug.print(DBG_DEBUG,"FreeRam: %d Queued messages: %d",freeRam(),uxQueueMessagesWaiting(queueIn));
   }

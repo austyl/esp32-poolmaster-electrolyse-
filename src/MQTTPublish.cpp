@@ -34,7 +34,7 @@ int freeRam(void);
 void stack_mon(UBaseType_t&);
 
 //Encode digital inputs states into one Byte (more efficient to send over MQTT)
-void EncodeBitMap()
+void EncodeBitMap(const ElectrolysisRuntimeData& electrolysisSnapshot)
 {
   BitMap1 = 0;
   BitMap2 = 0;
@@ -43,7 +43,7 @@ void EncodeBitMap()
 
   BitMap1 |= (FiltrationPump.IsRunning() & 1) << 7;
   BitMap1 |= (PhPump.IsRunning() & 1) << 6;
-  BitMap1 |= (ElectrolysisData.outputActive & 1) << 5;
+  BitMap1 |= (electrolysisSnapshot.outputActive & 1) << 5;
   BitMap1 |= ((!PhPump.TankLevel()) & 1) << 4;
   BitMap1 |= ((!ChlPump.TankLevel()) & 1) << 3;
   BitMap1 |= (PSIError & 1) << 2;
@@ -69,19 +69,25 @@ void EncodeBitMap()
   BitMap3 |= (PMConfig.get<bool>(ORPAUTOMODE) & 1) << 0;        // 1
 
   /*******/
-  BitMap4 |= (ElectrolysisData.enabled & 1U) << 7;                // 128
-  BitMap4 |= (ElectrolysisData.flowOk & 1U) << 6;                 // 64
-  BitMap4 |= (ElectrolysisData.pressureOk & 1U) << 5;             // 32
-  BitMap4 |= (ElectrolysisData.faultLatched & 1U) << 4;           // 16
-  BitMap4 |= (ElectrolysisData.outputActive & 1U) << 3;           // 8
-  BitMap4 |= ((!ElectrolysisData.polarityForward) & 1U) << 2;     // 4
-  BitMap4 |= ((ElectrolysisData.requestPct > 0) & 1U) << 1;       // 2
-  BitMap4 |= (ElectrolysisData.bridgePresent & 1U) << 0;          // 1
+  BitMap4 |= (electrolysisSnapshot.enabled & 1U) << 7;                // 128
+  BitMap4 |= (electrolysisSnapshot.flowOk & 1U) << 6;                 // 64
+  BitMap4 |= (electrolysisSnapshot.pressureOk & 1U) << 5;             // 32
+  BitMap4 |= (electrolysisSnapshot.faultLatched & 1U) << 4;           // 16
+  BitMap4 |= (electrolysisSnapshot.outputActive & 1U) << 3;           // 8
+  BitMap4 |= ((!electrolysisSnapshot.polarityForward) & 1U) << 2;     // 4
+  BitMap4 |= ((electrolysisSnapshot.requestPct > 0) & 1U) << 1;       // 2
+  BitMap4 |= (electrolysisSnapshot.bridgePresent & 1U) << 0;          // 1
 }
 
 void PublishTopic(const char* topic, JsonDocument& root)
 {
   char Payload[PAYLOAD_BUFFER_LENGTH];
+  const size_t requiredLength = measureJson(root);
+
+  if (requiredLength >= PAYLOAD_BUFFER_LENGTH) {
+    Debug.print(DBG_WARNING,"MQTT payload too large for topic %s: %u bytes", topic, (unsigned)requiredLength);
+    return;
+  }
 
   size_t n=serializeJson(root,Payload);
   if (mqttClient.publish(topic, 1, true, Payload,n) != 0)
@@ -98,6 +104,8 @@ void PublishTopic(const char* topic, JsonDocument& root)
 // Publishes system settings to MQTT broker
 void SettingsPublish(void *pvParameters)
 {
+  RunTimeData runtimeSnapshot;
+
   while(!startTasks);
   vTaskDelay(DT9);                                // Scheduling offset 
 
@@ -121,6 +129,7 @@ void SettingsPublish(void *pvParameters)
     #endif
 
     Debug.print(DBG_DEBUG,"[PublishSettings] start");
+    runtimeSnapshot = GetRunTimeDataSnapshot();
          
     if (mqttClient.connected())
     {
@@ -131,7 +140,7 @@ void SettingsPublish(void *pvParameters)
         root["FW"]     = Firmw;                            //firmware revision
         root["FSta"]   = PMConfig.get<uint8_t>(FILTRATIONSTART);          //Computed filtration start hour, in the morning (hours)
         root["FStaM"]  = PMConfig.get<uint8_t>(FILTRATIONSTARTMIN);       //Earliest Filtration start hour, in the morning (hours)
-        root["FDu"]    = (uint8_t)PMData.FiltrDuration;       //Computed filtration duration based on water temperature (hours)
+        root["FDu"]    = (uint8_t)runtimeSnapshot.FiltrDuration;       //Computed filtration duration based on water temperature (hours)
         root["FStoM"]  = PMConfig.get<uint8_t>(FILTRATIONSTOPMAX);        //Latest hour for the filtration to run. Whatever happens, filtration won't run later than this hour
         root["FSto"]   = PMConfig.get<uint8_t>(FILTRATIONSTOP);           //Computed filtration stop hour, equal to FSta + FDu (hour)
         root["pHUTL"]  = PhPump.MaxUpTime / 1000 / 60;  //Max allowed daily run time for the pH pump (/!\ mins)
@@ -155,8 +164,8 @@ void SettingsPublish(void *pvParameters)
 
         root["pHWS"]  = PMConfig.get<unsigned long>(PHPIDWINDOWSIZE) / 1000 / 60;        //pH PID window size (/!\ mins)
         root["ChlWS"] = PMConfig.get<unsigned long>(ORPPIDWINDOWSIZE) / 1000 / 60;       //Orp PID window size (/!\ mins)
-        root["pHSP"]  = PMData.Ph_SetPoint * 100;                  //pH setpoint (/!\ x100)
-        root["OrpSP"] = PMData.Orp_SetPoint;                       //Orp setpoint
+        root["pHSP"]  = runtimeSnapshot.Ph_SetPoint * 100;                  //pH setpoint (/!\ x100)
+        root["OrpSP"] = runtimeSnapshot.Orp_SetPoint;                       //Orp setpoint
         root["WSP"]   = PMConfig.get<double>(WATERTEMP_SETPOINT) * 100;           //Water temperature setpoint (/!\ x100)
         root["WLT"]   = PMConfig.get<double>(WATERTEMPLOWTHRESHOLD) * 100;        //Water temperature low threshold to activate anti-freeze mode (/!\ x100)
         root["PSIHT"] = PMConfig.get<double>(PSI_HIGHTHRESHOLD) * 100;            //Water pressure high threshold to trigger error (/!\ x100)
@@ -277,6 +286,9 @@ void SettingsPublish(void *pvParameters)
 
 void MeasuresPublish(void *pvParameters)
 { 
+  RunTimeData runtimeSnapshot;
+  ElectrolysisRuntimeData electrolysisSnapshot;
+
   while(!startTasks);
   vTaskDelay(DT8);                                // Scheduling offset 
   uint32_t mod1 = xTaskGetTickCount() % 1000;     // This is the offset to respect for future resume
@@ -321,7 +333,8 @@ void MeasuresPublish(void *pvParameters)
     td = millis();
     #endif    
     //Store the GPIO states in one Byte (more efficient over MQTT)
-    EncodeBitMap();
+    GetRuntimeDataSnapshot(runtimeSnapshot, electrolysisSnapshot);
+    EncodeBitMap(electrolysisSnapshot);
 
     if (mqttClient.connected())
     {
@@ -331,16 +344,16 @@ void MeasuresPublish(void *pvParameters)
 
         StaticJsonDocument<capacity> root;
 
-        root["TE"]      = PMData.AirTemp * 100;        // /!\ x100
-        root["Tmp"]     = PMData.WaterTemp * 100;
-        root["pH"]      = PMData.PhValue * 100;
-        root["PSI"]     = PMData.PSIValue * 100;
-        root["Orp"]     = PMData.OrpValue;
+        root["TE"]      = runtimeSnapshot.AirTemp * 100;        // /!\ x100
+        root["Tmp"]     = runtimeSnapshot.WaterTemp * 100;
+        root["pH"]      = runtimeSnapshot.PhValue * 100;
+        root["PSI"]     = runtimeSnapshot.PSIValue * 100;
+        root["Orp"]     = runtimeSnapshot.OrpValue;
         root["PhUpT"]   = PhPump.UpTime / 1000;
         root["ChlUpT"]  = ChlPump.UpTime / 1000;
-        root["ElPct"]   = ElectrolysisData.requestPct;
-        root["ElAct"]   = ElectrolysisData.appliedPct;
-        root["ElSt"]    = (uint8_t)ElectrolysisData.state;
+        root["ElPct"]   = electrolysisSnapshot.requestPct;
+        root["ElAct"]   = electrolysisSnapshot.appliedPct;
+        root["ElSt"]    = (uint8_t)electrolysisSnapshot.state;
         root["IO4"]     = BitMap4;
 
         snprintf(tempTopicMeas,sizeof(tempTopicMeas),"%s/%s",PMConfig.get<const char*>(MQTT_TOPIC),PoolTopicMeas1);
@@ -366,11 +379,11 @@ void MeasuresPublish(void *pvParameters)
         root["SWGUpT"]   = SWGPump.UpTime / 1000;
         root["FIUpT"]   = FiltrationPump.UpTime / 1000; // Filtration Pump Up Time in seconds
         root["FPUpT"]   = FillingPump.UpTime / 1000; // Pool Filling Pump Up Time in seconds
-        root["ElFlw"] = ElectrolysisData.flowOk;
-        root["ElPrs"] = ElectrolysisData.pressureOk;
-        root["ElPol"] = ElectrolysisData.polarityForward ? 0 : 1;
-        root["ElFlt"] = ElectrolysisData.faultLatched;
-        root["ElHW"]  = ElectrolysisData.bridgePresent;
+        root["ElFlw"] = electrolysisSnapshot.flowOk;
+        root["ElPrs"] = electrolysisSnapshot.pressureOk;
+        root["ElPol"] = electrolysisSnapshot.polarityForward ? 0 : 1;
+        root["ElFlt"] = electrolysisSnapshot.faultLatched;
+        root["ElHW"]  = electrolysisSnapshot.bridgePresent;
 
         snprintf(tempTopicMeas,sizeof(tempTopicMeas),"%s/%s",PMConfig.get<const char*>(MQTT_TOPIC),PoolTopicMeas2);
         remove_duplicates_slash(tempTopicMeas);
@@ -402,4 +415,3 @@ void MeasuresPublish(void *pvParameters)
     WaitTimeOut = (TickType_t)PMConfig.get<unsigned long>(PUBLISHPERIOD)/portTICK_PERIOD_MS - DeltaTime;
   }
 }
-

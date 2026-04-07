@@ -63,6 +63,7 @@ void logOverride(const char* label, double value)
 namespace InputSimulation {
 void update()
 {
+  const ElectrolysisRuntimeData electrolysisSnapshot = GetElectrolysisDataSnapshot();
   const unsigned long now = millis();
   if (lastUpdateMs == 0) {
     lastUpdateMs = now;
@@ -86,7 +87,7 @@ void update()
   }
 
   // ORP slowly rises while electrolysis is really active and decays otherwise.
-  if (ElectrolysisData.outputActive) {
+  if (electrolysisSnapshot.outputActive) {
     simOrp += dtSeconds * 0.35;
   } else {
     simOrp -= dtSeconds * 0.12;
@@ -94,7 +95,7 @@ void update()
   simOrp = constrain(simOrp, 550.0, 820.0);
 
   // Electrolysis tends to push pH up slightly; idle state slowly recenters.
-  if (ElectrolysisData.outputActive) {
+  if (electrolysisSnapshot.outputActive) {
     simPh += dtSeconds * 0.00035;
   } else if (simPh > 7.20) {
     simPh -= dtSeconds * 0.00015;

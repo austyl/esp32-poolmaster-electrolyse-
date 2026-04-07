@@ -66,6 +66,10 @@ void AnalogInit()
 
 void AnalogPoll(void *pvParameters)
 {
+  double phValue = 0.0;
+  double orpValue = 0.0;
+  double psiValue = 0.0;
+
   while (!startTasks) ;
 
 #ifdef SIMULATE_PHYSICAL_INPUTS
@@ -76,9 +80,11 @@ void AnalogPoll(void *pvParameters)
   for(;;)
   {
     InputSimulation::update();
+    RuntimeDataLock();
     PMData.PhValue = InputSimulation::ph();
     PMData.OrpValue = InputSimulation::orp();
     PMData.PSIValue = InputSimulation::psi();
+    RuntimeDataUnlock();
     stack_mon(hwm);
     vTaskDelayUntil(&ticktime,period);
   }
@@ -110,14 +116,18 @@ void AnalogPoll(void *pvParameters)
         
       //Ph
       samples_Ph.add(ph_sensor_value);          // compute average of pH from center 5 measurements among 11
-      PMData.PhValue = (samples_Ph.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PHCALIBCOEFFS0) + PMConfig.get<double>(PHCALIBCOEFFS1);
+      phValue = (samples_Ph.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PHCALIBCOEFFS0) + PMConfig.get<double>(PHCALIBCOEFFS1);
 
       //ORP
       samples_Orp.add(orp_sensor_value);        // compute average of ORP from last 5 measurements
-      PMData.OrpValue = (samples_Orp.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(ORPCALIBCOEFFS0) + PMConfig.get<double>(ORPCALIBCOEFFS1);
+      orpValue = (samples_Orp.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(ORPCALIBCOEFFS0) + PMConfig.get<double>(ORPCALIBCOEFFS1);
+      RuntimeDataLock();
+      PMData.PhValue = phValue;
+      PMData.OrpValue = orpValue;
+      RuntimeDataUnlock();
 
       Debug.print(DBG_DEBUG,"pH: %5.0f - %4.2f - ORP: %5.0f - %3.0fmV - PSI: %5.0f - %4.2fBar\r",
-        ph_sensor_value,PMData.PhValue,orp_sensor_value,PMData.OrpValue,psi_sensor_value,PMData.PSIValue);
+        ph_sensor_value,phValue,orp_sensor_value,orpValue,psi_sensor_value,psiValue);
     }
     
     adc_int.update();
@@ -128,8 +138,11 @@ void AnalogPoll(void *pvParameters)
 
       //PSI (water pressure)
       samples_PSI.add(psi_sensor_value);        // compute average of PSI from last 5 measurements
-      PMData.PSIValue = (samples_PSI.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PSICALIBCOEFFS0) + PMConfig.get<double>(PSICALIBCOEFFS1);
-      PMData.PSIValue = (PMData.PSIValue < 0)? 0 : PMData.PSIValue;
+      psiValue = (samples_PSI.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PSICALIBCOEFFS0) + PMConfig.get<double>(PSICALIBCOEFFS1);
+      psiValue = (psiValue < 0) ? 0 : psiValue;
+      RuntimeDataLock();
+      PMData.PSIValue = psiValue;
+      RuntimeDataUnlock();
     }
     unlockI2C();
 
@@ -153,6 +166,10 @@ void AnalogInit()
 
 void AnalogPoll(void *pvParameters)
 {
+  double phValue = 0.0;
+  double orpValue = 0.0;
+  double psiValue = 0.0;
+
   while (!startTasks) ;
 
   TickType_t period = PT1;  
@@ -188,25 +205,26 @@ void AnalogPoll(void *pvParameters)
         
         //Ph
         samples_Ph.add(ph_sensor_value);          // compute average of pH from center 5 measurements among 11
-        PMData.PhValue = (samples_Ph.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PHCALIBCOEFFS0) + PMConfig.get<double>(PHCALIBCOEFFS1);
+        phValue = (samples_Ph.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PHCALIBCOEFFS0) + PMConfig.get<double>(PHCALIBCOEFFS1);
 
 #ifdef SIMU
         if(!init_simu){
             if(newpHOutput) {
-                pHTab[iw] = PMData.PhPIDOutput;
+                const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
+                pHTab[iw] = runtimeSnapshot.PhPIDOutput;
                 pHCumul = pHTab[0]+pHTab[1]+pHTab[2];
                 iw++;
                 iw %= 3;
             }
-            PMData.PhValue = pHLastValue + pHCumul/4500000.*(double)((millis()-pHLastTime)/3600000.);
-            pHLastValue = PMData.PhValue;
+            phValue = pHLastValue + pHCumul/4500000.*(double)((millis()-pHLastTime)/3600000.);
+            pHLastValue = phValue;
             pHLastTime = millis();
         } else {
             init_simu = false;
             pHLastTime = millis();
             pHLastValue = 7.0;
-            PMData.PhValue = pHLastValue;
-            PMData.OrpValue = OrpLastValue;
+            phValue = pHLastValue;
+            orpValue = OrpLastValue;
             OrpLastTime = millis();
             OrpLastValue = 730.0;
             for(uint8_t i=0;i<3;i++) {
@@ -218,29 +236,35 @@ void AnalogPoll(void *pvParameters)
 
         //ORP
         samples_Orp.add(orp_sensor_value);        // compute average of ORP from last 5 measurements
-        PMData.OrpValue = (samples_Orp.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(ORPCALIBCOEFFS0) + PMConfig.get<double>(ORPCALIBCOEFFS1);
+        orpValue = (samples_Orp.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(ORPCALIBCOEFFS0) + PMConfig.get<double>(ORPCALIBCOEFFS1);
 
 #ifdef SIMU
         if(!init_simu){
             if(newChlOutput) {
-            ChlTab[jw] = PMData.OrpPIDOutput;
+            const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
+            ChlTab[jw] = runtimeSnapshot.OrpPIDOutput;
             ChlCumul = ChlTab[0]+ChlTab[1]+ChlTab[2];
             jw++;
             jw %= 3;
             }    
-            PMData.OrpValue = OrpLastValue + ChlCumul/36000.*(double)((millis()-OrpLastTime)/3600000.);
-            OrpLastValue = PMData.OrpValue;
+            orpValue = OrpLastValue + ChlCumul/36000.*(double)((millis()-OrpLastTime)/3600000.);
+            OrpLastValue = orpValue;
             OrpLastTime = millis();    
         } 
 #endif
 
         //PSI (water pressure)
         samples_PSI.add(psi_sensor_value);        // compute average of PSI from last 5 measurements
-        PMData.PSIValue = (samples_PSI.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PSICALIBCOEFFS0) + PMConfig.get<double>(PSICALIBCOEFFS1);
-        PMData.PSIValue = (PMData.PSIValue < 0)? 0 : PMData.PSIValue;
+        psiValue = (samples_PSI.getAverage(5)*0.1875/1000.)*PMConfig.get<double>(PSICALIBCOEFFS0) + PMConfig.get<double>(PSICALIBCOEFFS1);
+        psiValue = (psiValue < 0) ? 0 : psiValue;
+        RuntimeDataLock();
+        PMData.PhValue = phValue;
+        PMData.OrpValue = orpValue;
+        PMData.PSIValue = psiValue;
+        RuntimeDataUnlock();
 
         Debug.print(DBG_DEBUG,"pH: %5.0f - %4.2f - ORP: %5.0f - %3.0fmV - PSI: %5.0f - %4.2fBar\r",
-            ph_sensor_value,PMData.PhValue,orp_sensor_value,PMData.OrpValue,psi_sensor_value,PMData.PSIValue);
+            ph_sensor_value,phValue,orp_sensor_value,orpValue,psi_sensor_value,psiValue);
     }
     unlockI2C();
 
@@ -336,6 +360,8 @@ void StatusLights(void *pvParameters)
 
 void pHRegulation(void *pvParameters)
 {
+  unsigned long phPidOutput = 0;
+
   while (!startTasks) ;
   vTaskDelay(DT6);                                // Scheduling offset 
 
@@ -362,6 +388,7 @@ void pHRegulation(void *pvParameters)
     {  
       if (FiltrationPump.IsRunning()) {
   
+          RuntimeDataLock();
           if(PhPID.Compute()){
             Debug.print(DBG_INFO,"Ph  regulation: %10.2f, %13.9f, %13.9f, %17.9f",PMData.PhPIDOutput,PMData.PhValue,PMData.Ph_SetPoint,PMConfig.get<double>(PH_KP));
             if(PMData.PhPIDOutput < (double)30000.) PMData.PhPIDOutput = 0.;
@@ -381,22 +408,23 @@ void pHRegulation(void *pvParameters)
           {
             //time to shift the Relay Window
             PMData.PhPIDwStart += PMConfig.get<double>(PHPIDWINDOWSIZE);
-            }
-          if ((unsigned long)PMData.PhPIDOutput <= now - PMData.PhPIDwStart)
+          }
+          phPidOutput = (unsigned long)PMData.PhPIDOutput;
+          const unsigned long phPidWindowStart = PMData.PhPIDwStart;
+          RuntimeDataUnlock();
+          if (phPidOutput <= now - phPidWindowStart)
             PhPump.Stop();
           else
             PhPump.Start();   
       } else {
         PhPID.SetMode(MANUAL);
+        RuntimeDataLock();
         PMData.Ph_RegOnOff = false;
         PMData.PhPIDOutput = 0.0;
+        RuntimeDataUnlock();
         PhPump.Stop();
       } 
     }
-
- unsigned long PhPIDwStart, OrpPIDwStart;
-    double AirTemp;
-    double PhPIDOutput, OrpPIDOutput;
 
     #ifdef CHRONO
     t_act = millis() - td;
@@ -415,6 +443,8 @@ void pHRegulation(void *pvParameters)
 //Orp regulation loop
 void OrpRegulation(void *pvParameters)
 {
+  uint8_t demandPct = 0;
+
   while (!startTasks) ;
   vTaskDelay(DT5);                                // Scheduling offset 
 
@@ -440,6 +470,7 @@ void OrpRegulation(void *pvParameters)
     if (OrpPID.GetMode() == AUTOMATIC) {
       if (FiltrationPump.IsRunning())
       {
+        RuntimeDataLock();
         if(OrpPID.Compute()){
           Debug.print(DBG_INFO,"ORP regulation: %10.2f, %13.9f, %12.9f, %17.9f",PMData.OrpPIDOutput,PMData.OrpValue,PMData.Orp_SetPoint,PMConfig.get<double>(ORP_KP));
           if(PMData.OrpPIDOutput < (double)30000.) PMData.OrpPIDOutput = 0.;    
@@ -458,7 +489,7 @@ void OrpRegulation(void *pvParameters)
         double lowThreshold = PMData.Orp_SetPoint * (double)PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_LOW_PCT) / 100.0;
         double highThreshold = PMData.Orp_SetPoint * (double)PMConfig.get<uint8_t>(ELECTROLYSIS_ORP_HIGH_PCT) / 100.0;
         unsigned long pidWindow = PMConfig.get<unsigned long>(ORPPIDWINDOWSIZE);
-        uint8_t demandPct = 0;
+        demandPct = 0;
 
         if (PMData.WaterTemp >= PMConfig.get<double>(ELECTROLYSIS_MIN_TEMP_C)) {
           if (PMData.OrpValue >= highThreshold) {
@@ -471,14 +502,19 @@ void OrpRegulation(void *pvParameters)
         }
 
         PMData.OrpDemandPct = demandPct;
+        RuntimeDataUnlock();
       } else {
         OrpPID.SetMode(MANUAL);
+        RuntimeDataLock();
         PMData.Orp_RegOnOff = false;
         PMData.OrpPIDOutput = 0.0;
         PMData.OrpDemandPct = 0;
+        RuntimeDataUnlock();
       } 
     } else {
+      RuntimeDataLock();
       PMData.OrpDemandPct = 0;
+      RuntimeDataUnlock();
     }
 
     #ifdef CHRONO
@@ -564,6 +600,9 @@ void TempInit()
 //in case of reading error, the buffer is not updated and the last value is kept
 void getTemp(void *pvParameters)
 {
+  double waterTemp = 0.0;
+  double airTemp = 0.0;
+
   while (!startTasks) ;
   vTaskDelay(DT4);                                // Scheduling offset 
 
@@ -575,8 +614,10 @@ void getTemp(void *pvParameters)
   for(;;)
   {
     InputSimulation::update();
+    RuntimeDataLock();
     PMData.WaterTemp = InputSimulation::waterTemp();
     PMData.AirTemp = InputSimulation::airTemp();
+    RuntimeDataUnlock();
     stack_mon(hwm);
     vTaskDelayUntil(&ticktime,period);
   }
@@ -599,21 +640,29 @@ void getTemp(void *pvParameters)
     td = millis();
     #endif 
 
+    const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
+    waterTemp = runtimeSnapshot.WaterTemp;
+    airTemp = runtimeSnapshot.AirTemp;
+
     double temp = sensors_W.getTempC(DS18B20_W);
     if (isnan(temp) || temp == -127) {
       Debug.print(DBG_WARNING,"Error getting Water temperature");
-    }  else PMData.WaterTemp = temp;
-    samples_WTemp.add(PMData.WaterTemp);
-    PMData.WaterTemp = samples_WTemp.getAverage(5);
-    Debug.print(DBG_VERBOSE,"DS18B20_W: %6.2f C",PMData.WaterTemp);
+    }  else waterTemp = temp;
+    samples_WTemp.add(waterTemp);
+    waterTemp = samples_WTemp.getAverage(5);
+    Debug.print(DBG_VERBOSE,"DS18B20_W: %6.2f C",waterTemp);
 
     temp = sensors_A.getTempC(DS18B20_A);
     if (isnan(temp) || temp == -127) {
       Debug.print(DBG_WARNING,"Error getting Air temperature");
-    }  else PMData.AirTemp = temp;
-    samples_ATemp.add(PMData.AirTemp);
-    PMData.AirTemp = samples_ATemp.getAverage(5);
-    Debug.print(DBG_VERBOSE,"DS18B20_A: %6.2f C",PMData.AirTemp);
+    }  else airTemp = temp;
+    samples_ATemp.add(airTemp);
+    airTemp = samples_ATemp.getAverage(5);
+    RuntimeDataLock();
+    PMData.WaterTemp = waterTemp;
+    PMData.AirTemp = airTemp;
+    RuntimeDataUnlock();
+    Debug.print(DBG_VERBOSE,"DS18B20_A: %6.2f C",airTemp);
 
     sensors_W.requestTemperatures();
     sensors_A.requestTemperatures();

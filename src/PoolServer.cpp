@@ -15,7 +15,7 @@ void ProcessCommand(void *pvParameters)
 {
   //Json Document
   StaticJsonDocument<250> command;
-  char JSONCommand[200] = "";                         // JSON command to process  
+  MQTTCommandMessage message = {};                    // JSON command to process
   
   while (!startTasks) ;
   vTaskDelay(DT2);                                // Scheduling offset   
@@ -38,9 +38,10 @@ void ProcessCommand(void *pvParameters)
     //Is there any incoming JSON commands
     if (uxQueueMessagesWaiting(queueIn) != 0)
     {  
-      xQueueReceive(queueIn,&JSONCommand,0);
+      xQueueReceive(queueIn, &message, 0);
+      command.clear();
       //Parse Json object and find which command it is
-      DeserializationError error = deserializeJson(command,JSONCommand);
+      DeserializationError error = deserializeJson(command, message.data, message.length);
 
       // Test if parsing succeeds.
       if (error)
@@ -49,12 +50,12 @@ void ProcessCommand(void *pvParameters)
       }
       else
       {
-        Debug.print(DBG_DEBUG,"Json parseObject() success: %s",JSONCommand);
+        Debug.print(DBG_DEBUG,"Json parseObject() success: %s",message.data);
 
         //Find command keyword in list and execute corresponding function handler
         JsonObject::iterator it = command.as<JsonObject>().begin();
         if (it == command.as<JsonObject>().end()) {
-          Debug.print(DBG_WARNING,"No command found in JSON: %s",JSONCommand);
+          Debug.print(DBG_WARNING,"No command found in JSON: %s",message.data);
         } else {
           auto it_find = server_handlers.find(it->key().c_str());
           if (it_find != server_handlers.end()) {

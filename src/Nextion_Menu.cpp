@@ -108,6 +108,7 @@ void NexMenu_Init(EasyNex& _myNex)
 void NexMenu_Loop(EasyNex& _myNex)
 {
     uint8_t _lang = PMConfig.get<uint8_t>(LANG_LOCALE);
+    const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
 
     switch(_myNex.currentPageId)
     {
@@ -122,7 +123,7 @@ void NexMenu_Loop(EasyNex& _myNex)
             }
 
             //Update Values
-            snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PMData.Ph_SetPoint);
+            snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),runtimeSnapshot.Ph_SetPoint);
             _myNex.writeStr(F("vaValueSrc_1.txt"),temp);
             snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PhPump.GetFlowRate());
             _myNex.writeStr(F("vaValueSrc_2.txt"),temp);
@@ -139,7 +140,7 @@ void NexMenu_Loop(EasyNex& _myNex)
                 _myNex.writeNum(F("btOFF_0.val"),(!ChlPump.IsRunning()&&!PMConfig.get<bool>(ORPAUTOMODE)));
             }
 
-            snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),PMData.Orp_SetPoint);
+            snprintf_P(temp,sizeof(temp),PSTR("%3.0f"),runtimeSnapshot.Orp_SetPoint);
             _myNex.writeStr(F("vaValueSrc_1.txt"),temp);
             snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),ChlPump.GetFlowRate());
             _myNex.writeStr(F("vaValueSrc_2.txt"),temp);
@@ -184,9 +185,9 @@ void NexMenu_Loop(EasyNex& _myNex)
             _myNex.writeStr(F("vaValueSrc_0.txt"),temp);
             snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PMConfig.get<double>(PSI_HIGHTHRESHOLD));
             _myNex.writeStr(F("vaValueSrc_1.txt"),temp);
-            snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),PMData.PSIValue);
+            snprintf_P(temp,sizeof(temp),PSTR("%3.1f"),runtimeSnapshot.PSIValue);
             _myNex.writeStr(F("tValue_2.txt"),temp);
-            _myNex.writeNum(F("jGauge_2.val"),(int)constrain(((PMData.PSIValue/PMConfig.get<double>(PSI_HIGHTHRESHOLD))*100),0,100));
+            _myNex.writeNum(F("jGauge_2.val"),(int)constrain(((runtimeSnapshot.PSIValue / PMConfig.get<double>(PSI_HIGHTHRESHOLD)) * 100),0,100));
 
         break;
 
@@ -478,4 +479,3 @@ void NexMenu_Loop(EasyNex& _myNex)
         break;
     }   // End of switch(_myNex.currentPageId)
 }   // End of NexMenu_Loop function
-

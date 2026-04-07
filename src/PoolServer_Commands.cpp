@@ -86,7 +86,9 @@ void p_Lang(StaticJsonDocument<250>  &_jsonsdoc) {
 }
 
 void p_TempExt(StaticJsonDocument<250>  &_jsonsdoc) {
+    RuntimeDataLock();
     PMData.AirTemp = _jsonsdoc[F("TempExt")].as<float>();
+    RuntimeDataUnlock();
 }
 
 void p_pHCoeffs(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -278,12 +280,16 @@ void p_Winter(StaticJsonDocument<250>  &_jsonsdoc) {
 }
 void p_PhSetPoint(StaticJsonDocument<250>  &_jsonsdoc) {
     PMConfig.put<double>(PH_SETPOINT, _jsonsdoc[F("PhSetPoint")].as<double>());
+    RuntimeDataLock();
     PMData.Ph_SetPoint = PMConfig.get<double>(PH_SETPOINT);
+    RuntimeDataUnlock();
     PublishSettings();
 }
 void p_OrpSetPoint(StaticJsonDocument<250>  &_jsonsdoc) {
     PMConfig.put<double>(ORP_SETPOINT, _jsonsdoc[F("OrpSetPoint")].as<double>());
+    RuntimeDataLock();
     PMData.Orp_SetPoint = PMConfig.get<double>(ORP_SETPOINT);
+    RuntimeDataUnlock();
     PublishSettings();
 }
 void p_WSetPoint(StaticJsonDocument<250>  &_jsonsdoc) {
@@ -654,4 +660,3 @@ void p_SimReset(StaticJsonDocument<250>  &_jsonsdoc) {
         InputSimulation::reset();
     }
 }
-

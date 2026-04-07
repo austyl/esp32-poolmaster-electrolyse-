@@ -139,6 +139,7 @@ ConfigManager PMConfig;
 
 // Mutex to share access to I2C bus among two tasks: AnalogPoll and StatusLights
 static SemaphoreHandle_t mutex;
+static portMUX_TYPE runtimeDataMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Functions prototypes
 void StartTime(void);
@@ -422,7 +423,7 @@ void setup()
   SetOrpPID(false);
 
    // Create queue for external commands
-  queueIn = xQueueCreate((UBaseType_t)QUEUE_ITEMS_NBR,(UBaseType_t)QUEUE_ITEM_SIZE);
+  queueIn = xQueueCreate((UBaseType_t)QUEUE_ITEMS_NBR, (UBaseType_t)sizeof(MQTTCommandMessage));
 
   // Create loop tasks in the scheduler.
   //------------------------------------
@@ -656,6 +657,49 @@ void unlockI2C(){
   xSemaphoreGive(mutex);  
 }
 
+void RuntimeDataLock()
+{
+  taskENTER_CRITICAL(&runtimeDataMux);
+}
+
+void RuntimeDataUnlock()
+{
+  taskEXIT_CRITICAL(&runtimeDataMux);
+}
+
+RunTimeData GetRunTimeDataSnapshot()
+{
+  RunTimeData snapshot;
+  RuntimeDataLock();
+  snapshot = PMData;
+  RuntimeDataUnlock();
+  return snapshot;
+}
+
+ElectrolysisRuntimeData GetElectrolysisDataSnapshot()
+{
+  ElectrolysisRuntimeData snapshot;
+  RuntimeDataLock();
+  snapshot = ElectrolysisData;
+  RuntimeDataUnlock();
+  return snapshot;
+}
+
+void GetRuntimeDataSnapshot(RunTimeData& runtimeData, ElectrolysisRuntimeData& electrolysisData)
+{
+  RuntimeDataLock();
+  runtimeData = PMData;
+  electrolysisData = ElectrolysisData;
+  RuntimeDataUnlock();
+}
+
+void SetElectrolysisDataSnapshot(const ElectrolysisRuntimeData& snapshot)
+{
+  RuntimeDataLock();
+  ElectrolysisData = snapshot;
+  RuntimeDataUnlock();
+}
+
 // Set time parameters, including DST
 void StartTime(){
   configTime(0, 0,"0.pool.ntp.org","1.pool.ntp.org","2.pool.ntp.org"); // 3 possible NTP servers
@@ -711,4 +755,3 @@ void loop()
   delay(1000);
   vTaskDelete(nullptr);
 }
-

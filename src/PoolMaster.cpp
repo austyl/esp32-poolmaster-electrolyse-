@@ -38,6 +38,7 @@ void PoolMaster(void *pvParameters)
   bool DoneForTheDay = false;                     // Reset actions done once per day
   bool NTPCheked = false;                         // If disconnected attemps to connect NTP every 10 minutes
   bool d_calc = false;                            // Filtration duration computed
+  RunTimeData runtimeSnapshot;
 
   static UBaseType_t hwm=0;                       // free stack size
   #ifdef SMTP
@@ -158,28 +159,35 @@ void PoolMaster(void *pvParameters)
     if (hour() == 15 && (millis() - FiltrationPump.StartTime) > 300000 && !d_calc)
     #endif
     {
-        if (PMData.WaterTemp < PMConfig.get<double>(WATERTEMPLOWTHRESHOLD)){
-            PMData.FiltrDuration = 2; // Set Filtration duration to 2 hours
+        uint8_t filtrDuration = 0;
+        runtimeSnapshot = GetRunTimeDataSnapshot();
+
+        if (runtimeSnapshot.WaterTemp < PMConfig.get<double>(WATERTEMPLOWTHRESHOLD)){
+            filtrDuration = 2; // Set Filtration duration to 2 hours
         }
-        else if (PMData.WaterTemp >= PMConfig.get<double>(WATERTEMPLOWTHRESHOLD) && PMData.WaterTemp < PMConfig.get<double>(WATERTEMP_SETPOINT)){
-            PMData.FiltrDuration = round(PMData.WaterTemp / 3.);
+        else if (runtimeSnapshot.WaterTemp >= PMConfig.get<double>(WATERTEMPLOWTHRESHOLD) && runtimeSnapshot.WaterTemp < PMConfig.get<double>(WATERTEMP_SETPOINT)){
+            filtrDuration = round(runtimeSnapshot.WaterTemp / 3.);
         }
-        else if (PMData.WaterTemp >= PMConfig.get<double>(WATERTEMP_SETPOINT)){
-            PMData.FiltrDuration = round(PMData.WaterTemp / 2.);
+        else if (runtimeSnapshot.WaterTemp >= PMConfig.get<double>(WATERTEMP_SETPOINT)){
+            filtrDuration = round(runtimeSnapshot.WaterTemp / 2.);
         }
 
+        RuntimeDataLock();
+        PMData.FiltrDuration = filtrDuration;
+        RuntimeDataUnlock();
+
         uint8_t _FiltStart, _FiltStop;
-        _FiltStart = 15 - (int)round(PMData.FiltrDuration / 2.);
+        _FiltStart = 15 - (int)round(filtrDuration / 2.);
         if (_FiltStart < PMConfig.get<uint8_t>(FILTRATIONSTARTMIN))
             _FiltStart = PMConfig.get<uint8_t>(FILTRATIONSTARTMIN);
-        _FiltStop = _FiltStart + PMData.FiltrDuration;
+        _FiltStop = _FiltStart + filtrDuration;
         if (_FiltStop > PMConfig.get<uint8_t>(FILTRATIONSTOPMAX))
             _FiltStop = PMConfig.get<uint8_t>(FILTRATIONSTOPMAX);
         
         PMConfig.put<uint8_t>(FILTRATIONSTART, _FiltStart);
         PMConfig.put<uint8_t>(FILTRATIONSTOP, _FiltStop);
 
-        Debug.print(DBG_INFO,"Filtration duration: %dh",PMData.FiltrDuration);
+        Debug.print(DBG_INFO,"Filtration duration: %dh",filtrDuration);
         Debug.print(DBG_INFO,"Start: %dh - Stop: %dh",PMConfig.get<uint8_t>(FILTRATIONSTART),PMConfig.get<uint8_t>(FILTRATIONSTOP));
 
         PublishSettings();
@@ -218,17 +226,21 @@ void SetPhPID(bool Enable)
   {
     //Start PhPID
     PhPump.ClearErrors();
+    PhPID.SetMode(AUTOMATIC);
+    RuntimeDataLock();
     PMData.PhPIDOutput = 0.0;
     PMData.PhPIDwStart = millis();
-    PhPID.SetMode(AUTOMATIC);
     PMData.Ph_RegOnOff = true; // Set the runtime data to true
+    RuntimeDataUnlock();
   }
   else
   {
     //Stop PhPID
     PhPID.SetMode(MANUAL);
+    RuntimeDataLock();
     PMData.Ph_RegOnOff = false; // Set the runtime data to false
     PMData.PhPIDOutput = 0.0; // Reset the PID output
+    RuntimeDataUnlock();
     //PhPump.Stop(); // Do not stop PhPump here, it is controlled by the PID or directly by the user
   }
 }
@@ -240,19 +252,23 @@ void SetOrpPID(bool Enable)
   {
     //Start OrpPID
     SWGPump.ClearErrors();
+    OrpPID.SetMode(AUTOMATIC);
+    RuntimeDataLock();
     PMData.OrpPIDOutput = 0.0;
     PMData.OrpDemandPct = 0;
     PMData.OrpPIDwStart = millis();
-    OrpPID.SetMode(AUTOMATIC);
     PMData.Orp_RegOnOff = true; // Set the runtime data to true
+    RuntimeDataUnlock();
   }
   else
   {
     //Stop OrpPID
     OrpPID.SetMode(MANUAL);
+    RuntimeDataLock();
     PMData.Orp_RegOnOff = false; // Set the runtime data to false
     PMData.OrpPIDOutput = 0.0; // Reset the PID output
     PMData.OrpDemandPct = 0;
+    RuntimeDataUnlock();
     //ChlPump.Stop(); // Do not stop ChlPump here, it is controlled by the PID or directly by the user
   }
 }
@@ -281,7 +297,8 @@ void Send_Email(){
     {
       if(!notif_sent[0])
       {
-        sprintf(texte,"Water pressure alert: %4.2fbar",PMData.PSIValue);
+        const RunTimeData runtimeSnapshot = GetRunTimeDataSnapshot();
+        sprintf(texte,"Water pressure alert: %4.2fbar",runtimeSnapshot.PSIValue);
         message.text.content = texte;
         if(SMTP_Connect()){   
           if(!MailClient.sendMail(&smtp, &message))
